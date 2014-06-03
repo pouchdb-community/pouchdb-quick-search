@@ -57,5 +57,25 @@ function tests(dbName, dbType) {
         rows[0].score.should.be.above(0);
       });
     });
+    
+    it('basic search - ordering', function () {
+      
+      // the word "court" is used once in the first doc,
+      // twice in the second, and twice in the third,
+      // but the third is longest, so tf-idf should give us
+      // 2 3 1
+      
+      return db.bulkDocs({docs: docs}).then(function () {
+        var opts = {
+          fields: ['title', 'text', 'desc'],
+          q: 'court'
+        };
+        return db.search(opts);
+      }).then(function (rows) {
+        rows.length.should.equal(3);
+        var ids = rows.map(function (x) { return x.id; });
+        ids.should.deep.equal(['2', '3', '1'], 'got incorrect doc order: ' + JSON.stringify(rows));
+      });
+    });
   });
 }
