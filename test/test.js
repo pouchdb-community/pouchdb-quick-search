@@ -47,7 +47,6 @@ function tests(dbName, dbType) {
     it('basic search', function () {
       return db.bulkDocs({docs: docs}).then(function () {
         var opts = {
-          name: 'foo',
           fields: ['title', 'text', 'desc'],
           q: 'sketch'
         };
