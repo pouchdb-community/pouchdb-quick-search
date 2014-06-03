@@ -20,8 +20,7 @@ require('bluebird'); // var Promise = require('bluebird');
 
 var dbs;
 if (process.browser) {
-  dbs = 'testdb' + Math.random() +
-    ',http://localhost:5984/testdb' + Math.round(Math.random() * 100000);
+  dbs = 'testdb' + Math.random();
 } else {
   dbs = process.env.TEST_DB;
 }
@@ -30,6 +29,8 @@ dbs.split(',').forEach(function (db) {
   var dbType = /^http/.test(db) ? 'http' : 'local';
   tests(db, dbType);
 });
+
+var docs = require('./test-docs');
 
 function tests(dbName, dbType) {
 
@@ -42,10 +43,13 @@ function tests(dbName, dbType) {
   afterEach(function () {
     return Pouch.destroy(dbName);
   });
-  describe(dbType + ': hello test suite', function () {
-    it('should say hello', function () {
-      return db.sayHello().then(function (response) {
-        response.should.equal('hello');
+  describe(dbType + ': search test suite', function () {
+    it('basic search', function () {
+      return db.bulkDocs({docs: docs}).then(function () {
+        return db.search({name: 'foo', fields: ['title', 'text', 'desc'], q: 'sketch'});
+      }).then(function (res) {
+        res.rows.length.should.equal(1);
+        res.rows[0].id.should.equal('3');
       });
     });
   });
