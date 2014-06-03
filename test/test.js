@@ -51,9 +51,10 @@ function tests(dbName, dbType) {
           q: 'sketch'
         };
         return db.search(opts);
-      }).then(function (res) {
-        res.rows.length.should.equal(1);
-        res.rows[0].id.should.equal('3');
+      }).then(function (rows) {
+        rows.length.should.equal(1);
+        rows[0].id.should.equal('3');
+        rows[0].score.should.be.above(0);
       });
     });
   });
