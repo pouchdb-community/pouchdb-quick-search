@@ -46,7 +46,12 @@ function tests(dbName, dbType) {
   describe(dbType + ': search test suite', function () {
     it('basic search', function () {
       return db.bulkDocs({docs: docs}).then(function () {
-        return db.search({name: 'foo', fields: ['title', 'text', 'desc'], q: 'sketch'});
+        var opts = {
+          name: 'foo',
+          fields: ['title', 'text', 'desc'],
+          q: 'sketch'
+        };
+        return db.search(opts);
       }).then(function (res) {
         res.rows.length.should.equal(1);
         res.rows[0].id.should.equal('3');

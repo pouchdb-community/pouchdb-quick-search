@@ -1,7 +1,7 @@
 'use strict';
 
 var utils = require('./pouch-utils');
-//var lunr = require('lunr');
+var lunr = require('lunr');
 
 exports.search = utils.toPromise(function (opts, callback) {
   //
@@ -14,7 +14,7 @@ exports.search = utils.toPromise(function (opts, callback) {
   var name = opts.name;
 
   var mapFun = function (doc, emit) {
-    /*
+
     var index = lunr(function () {
       var self = this;
 
@@ -24,12 +24,12 @@ exports.search = utils.toPromise(function (opts, callback) {
       });
     });
 
-    index.add(doc);*/
-    fields.forEach(function (field) {
-      var tokens = doc[field].split(' ');
-      tokens.forEach(function (token) {
-        emit(token);
-      });
+    index.add(doc);
+
+    // HACK: no TF-IDF or anything fancy, just iterating thru
+    // tokens
+    index.corpusTokens.elements.forEach(function (token) {
+      emit(token);
     });
   };
 
