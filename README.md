@@ -3,7 +3,7 @@ PouchDB Quick Search
 
 [![Build Status](https://travis-ci.org/nolanlawson/pouchdb-quick-search.svg)](https://travis-ci.org/nolanlawson/pouchdb-quick-search)
 
-**Nothing much to see here yet; this is a work in progress.**
+**Nothing much to see here; this is a work in progress.**
 
 A very efficient and accurate Lucene-style search engine built on top of PouchDB. Analyzes English text, indexes it in the database, and allows you to query for documents using a simple API. Ideal for PhoneGap apps or any webapp that needs offline search support.
 
