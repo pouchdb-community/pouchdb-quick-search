@@ -55,10 +55,10 @@ function tests(dbName, dbType) {
           q: 'sketch'
         };
         return db.search(opts);
-      }).then(function (rows) {
-        rows.length.should.equal(1);
-        rows[0].id.should.equal('3');
-        rows[0].score.should.be.above(0);
+      }).then(function (res) {
+        res.rows.length.should.equal(1);
+        res.rows[0].id.should.equal('3');
+        res.rows[0].score.should.be.above(0);
       });
     });
 
@@ -69,8 +69,8 @@ function tests(dbName, dbType) {
           q: 'fizzbuzz'
         };
         return db.search(opts);
-      }).then(function (rows) {
-        rows.length.should.equal(0);
+      }).then(function (res) {
+        res.rows.length.should.equal(0);
       });
     });
 
@@ -81,9 +81,9 @@ function tests(dbName, dbType) {
           q: 'text'
         };
         return db.search(opts);
-      }).then(function (rows) {
-        rows.length.should.equal(2);
-        rows[0].score.should.equal(rows[1].score);
+      }).then(function (res) {
+        res.rows.length.should.equal(2);
+        res.rows[0].score.should.equal(res.rows[1].score);
       });
     });
 
@@ -100,10 +100,10 @@ function tests(dbName, dbType) {
           q: 'court'
         };
         return db.search(opts);
-      }).then(function (rows) {
-        rows.length.should.equal(3);
-        var ids = rows.map(function (x) { return x.id; });
-        ids.should.deep.equal(['2', '3', '1'], 'got incorrect doc order: ' + JSON.stringify(rows));
+      }).then(function (res) {
+        res.rows.length.should.equal(3);
+        var ids = res.rows.map(function (x) { return x.id; });
+        ids.should.deep.equal(['2', '3', '1'], 'got incorrect doc order: ' + JSON.stringify(res));
       });
     });
 
@@ -123,9 +123,9 @@ function tests(dbName, dbType) {
           mm: '100%'
         };
         return db.search(opts);
-      }).then(function (rows) {
-        var ids = rows.map(function (x) { return x.id; });
-        ids.should.deep.equal(['1'], 'got incorrect docs: ' + JSON.stringify(rows));
+      }).then(function (res) {
+        var ids = res.rows.map(function (x) { return x.id; });
+        ids.should.deep.equal(['1'], 'got incorrect docs: ' + JSON.stringify(res));
       });
     });
 
@@ -137,9 +137,9 @@ function tests(dbName, dbType) {
           mm: '50%'
         };
         return db.search(opts);
-      }).then(function (rows) {
-        var ids = rows.map(function (x) { return x.id; });
-        ids.should.deep.equal(['1', '2'], 'got incorrect docs: ' + JSON.stringify(rows));
+      }).then(function (res) {
+        var ids = res.rows.map(function (x) { return x.id; });
+        ids.should.deep.equal(['1', '2'], 'got incorrect docs: ' + JSON.stringify(res));
       });
     });
 
@@ -151,9 +151,9 @@ function tests(dbName, dbType) {
           mm: '1%'
         };
         return db.search(opts);
-      }).then(function (rows) {
-        var ids = rows.map(function (x) { return x.id; });
-        ids.should.deep.equal(['1'], 'got incorrect docs: ' + JSON.stringify(rows));
+      }).then(function (res) {
+        var ids = res.rows.map(function (x) { return x.id; });
+        ids.should.deep.equal(['1'], 'got incorrect docs: ' + JSON.stringify(res));
       });
     });
 
@@ -166,9 +166,9 @@ function tests(dbName, dbType) {
           mm: '34%'
         };
         return db.search(opts);
-      }).then(function (rows) {
-        var ids = rows.map(function (x) { return x.id; });
-        ids.should.deep.equal([], 'got incorrect docs: ' + JSON.stringify(rows));
+      }).then(function (res) {
+        var ids = res.rows.map(function (x) { return x.id; });
+        ids.should.deep.equal([], 'got incorrect docs: ' + JSON.stringify(res));
       });
     });
     it('search with mm=34% and 2/3 match', function () {
@@ -180,9 +180,9 @@ function tests(dbName, dbType) {
           mm: '34%'
         };
         return db.search(opts);
-      }).then(function (rows) {
-        var ids = rows.map(function (x) { return x.id; });
-        ids.should.deep.equal(['1'], 'got incorrect docs: ' + JSON.stringify(rows));
+      }).then(function (res) {
+        var ids = res.rows.map(function (x) { return x.id; });
+        ids.should.deep.equal(['1'], 'got incorrect docs: ' + JSON.stringify(res));
       });
     });
     it('search with mm=33% and 1/3 match', function () {
@@ -194,9 +194,9 @@ function tests(dbName, dbType) {
           mm: '33%'
         };
         return db.search(opts);
-      }).then(function (rows) {
-        var ids = rows.map(function (x) { return x.id; });
-        ids.should.deep.equal(['1'], 'got incorrect docs: ' + JSON.stringify(rows));
+      }).then(function (res) {
+        var ids = res.rows.map(function (x) { return x.id; });
+        ids.should.deep.equal(['1'], 'got incorrect docs: ' + JSON.stringify(res));
       });
     });
 
@@ -207,10 +207,10 @@ function tests(dbName, dbType) {
           q: 'yoshi'
         };
         return db.search(opts);
-      }).then(function (rows) {
-        var ids = rows.map(function (x) { return x.id; });
-        ids.should.deep.equal(['1', '2'], 'got incorrect docs: ' + JSON.stringify(rows));
-        rows[0].score.should.not.equal(rows[1].score, 'score should be higher');
+      }).then(function (res) {
+        var ids = res.rows.map(function (x) { return x.id; });
+        ids.should.deep.equal(['1', '2'], 'got incorrect docs: ' + JSON.stringify(res));
+        res.rows[0].score.should.not.equal(res.rows[1].score, 'score should be higher');
       });
     });
 
@@ -221,10 +221,10 @@ function tests(dbName, dbType) {
           q: 'mario'
         };
         return db.search(opts);
-      }).then(function (rows) {
-        var ids = rows.map(function (x) { return x.id; });
-        ids.should.deep.equal(['2', '1'], 'got incorrect docs: ' + JSON.stringify(rows));
-        rows[0].score.should.not.equal(rows[1].score, 'score should be higher');
+      }).then(function (res) {
+        var ids = res.rows.map(function (x) { return x.id; });
+        ids.should.deep.equal(['2', '1'], 'got incorrect docs: ' + JSON.stringify(res));
+        res.rows[0].score.should.not.equal(res.rows[1].score, 'score should be higher');
       });
     });
 
@@ -240,10 +240,10 @@ function tests(dbName, dbType) {
           mm: '50%'
         };
         return db.search(opts);
-      }).then(function (rows) {
-        var ids = rows.map(function (x) { return x.id; });
-        ids.should.deep.equal(['3', '4'], 'got incorrect docs: ' + JSON.stringify(rows));
-        rows[0].score.should.not.equal(rows[1].score, 'score should be higher');
+      }).then(function (res) {
+        var ids = res.rows.map(function (x) { return x.id; });
+        ids.should.deep.equal(['3', '4'], 'got incorrect docs: ' + JSON.stringify(res));
+        res.rows[0].score.should.not.equal(res.rows[1].score, 'score should be higher');
       });
     });
 
@@ -254,9 +254,9 @@ function tests(dbName, dbType) {
           q: 'mario'
         };
         return db.search(opts);
-      }).then(function (rows) {
-        var ids = rows.map(function (x) { return x.id; });
-        ids.should.deep.equal(['1'], 'got incorrect docs: ' + JSON.stringify(rows));
+      }).then(function (res) {
+        var ids = res.rows.map(function (x) { return x.id; });
+        ids.should.deep.equal(['1'], 'got incorrect docs: ' + JSON.stringify(res));
       });
     });
   });

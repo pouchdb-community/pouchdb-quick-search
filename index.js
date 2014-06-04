@@ -133,7 +133,7 @@ exports.search = utils.toPromise(function (opts, callback) {
   pouch.query(mapFun, queryOpts).then(function (res) {
 
     if (!res.rows.length) {
-      return callback(null, []);
+      return callback(null, {rows: []});
     }
 
     var docIdsToFieldsToQueryTerms = {};
@@ -185,7 +185,7 @@ exports.search = utils.toPromise(function (opts, callback) {
     }
 
     if (!Object.keys(docIdsToFieldsToQueryTerms).length) {
-      return callback(null, []);
+      return callback(null, {rows: []});
     }
 
     var keys = Object.keys(docIdsToFieldsToQueryTerms).map(function (docId) {
@@ -206,8 +206,9 @@ exports.search = utils.toPromise(function (opts, callback) {
       });
       // step 3
       // now we have all information, so calculate cosine similarity
-      callback(null, calculateCosineSim(queryTerms, termDFs,
-        docIdsToFieldsToQueryTerms, docIdsToFieldsToNorms));
+      var rows = calculateCosineSim(queryTerms, termDFs,
+        docIdsToFieldsToQueryTerms, docIdsToFieldsToNorms);
+      callback(null, {rows: rows});
     });
   }).catch(callback);
 });
