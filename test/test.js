@@ -246,5 +246,18 @@ function tests(dbName, dbType) {
         rows[0].score.should.not.equal(rows[1].score, 'score should be higher');
       });
     });
+
+    it('should work with one field only', function () {
+      return db.bulkDocs({docs: docs3}).then(function () {
+        var opts = {
+          fields: ['text'],
+          q: 'mario'
+        };
+        return db.search(opts);
+      }).then(function (rows) {
+        var ids = rows.map(function (x) { return x.id; });
+        ids.should.deep.equal(['1'], 'got incorrect docs: ' + JSON.stringify(rows));
+      });
+    });
   });
 }

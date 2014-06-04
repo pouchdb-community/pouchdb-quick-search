@@ -7,7 +7,7 @@ var uniq = require('uniq');
 var index = lunr();
 
 var TYPE_TOKEN_COUNT = 'a';
-var TYPE_DOC_LEN_NORM = 'b';
+var TYPE_DOC_INFO = 'b';
 
 function add(left, right) {
   return left + right;
@@ -17,8 +17,8 @@ function getTokenStream(text) {
   return index.pipeline.run(lunr.tokenizer(text));
 }
 
-function calculateCosineSim(queryTerms, termDFs, docIdsToQueryTerms,
-                            docIdsToDocLenNorms) {
+function calculateCosineSim(queryTerms, termDFs, docIdsToFieldsToQueryTerms,
+                            docIdsToFieldsToNorms) {
   // calculate cosine similarity using tf-idf, which is equal to
   // dot-product(q, d) / (norm(q) * norm(doc))
   // although there is no point in calculating the query norm,
@@ -27,27 +27,41 @@ function calculateCosineSim(queryTerms, termDFs, docIdsToQueryTerms,
   //
   // then we return a sorted list of results, like:
   // [{id: {...}, score: 0.2}, {id: {...}, score: 0.1}];
+  //
+  // we also implement the dismax algorithm here, so the doc score is the
+  // sum of its fields' scores, and this is done on a per-query-term basis,
+  // then the maximum score for each of the query terms is the one chosen
+  //
 
-  var results = Object.keys(docIdsToQueryTerms).map(function (docId) {
-    var docQueryTermsToCounts = docIdsToQueryTerms[docId];
-    var docLenNorm = docIdsToDocLenNorms[docId];
+  var results = Object.keys(docIdsToFieldsToQueryTerms).map(function (docId) {
 
-    var dotProduct = queryTerms.map(function (queryTerm) {
-      if (!(queryTerm in docQueryTermsToCounts)) {
-        return 0;
+    var fieldsToQueryTerms = docIdsToFieldsToQueryTerms[docId];
+    var fieldsToNorms = docIdsToFieldsToNorms[docId];
+
+    var queryScores = queryTerms.map(function (queryTerm) {
+      return fieldsToQueryTerms.map(function (queryTermsToCounts, fieldIdx) {
+        var fieldNorm = fieldsToNorms[fieldIdx];
+        if (!(queryTerm in queryTermsToCounts)) {
+          return 0;
+        }
+        var termDF = termDFs[queryTerm];
+        var termTF = queryTermsToCounts[queryTerm];
+        var docScore = termTF / termDF; // TF-IDF for doc
+        var queryScore = 1 / termDF; // TF-IDF for query, count assumed to be 1
+        return docScore * queryScore / fieldNorm;
+      }).reduce(add, 0);
+    });
+
+    var maxQueryScore = 0;
+    queryScores.forEach(function (queryScore) {
+      if (queryScore > maxQueryScore) {
+        maxQueryScore = queryScore;
       }
-      var termDF = termDFs[queryTerm];
-      var termTF = docQueryTermsToCounts[queryTerm];
-      var docScore = termTF / termDF; // TF-IDF for doc
-      var queryScore = 1 / termDF; // TF-IDF for query, count assumed to be 1
-      return docScore * queryScore;
-    }).reduce(add, 0);
-
-    var finalScore = dotProduct / docLenNorm;
+    });
 
     return {
       id: docId,
-      score: finalScore
+      score: maxQueryScore
     };
   });
 
@@ -66,20 +80,26 @@ exports.search = utils.toPromise(function (opts, callback) {
   var persistedIndexName = 'search-' + utils.MD5(JSON.stringify(fields));
 
   var mapFun = function (doc, emit) {
-    // just add all tokens from all fields for now
-    // later, we can weight on a per-field basis
-    var terms = [];
-    fields.forEach(function (field) {
+    var docInfo = [];
+    fields.forEach(function (field, fieldIdx) {
       var text = doc[field];
+      var fieldLenNorm;
       if (text) {
-        terms = terms.concat(getTokenStream(text));
+        var terms = getTokenStream(text);
+        terms.forEach(function (term) {
+          // avoid emitting the value if there's only one field;
+          // it takes up unnecessary space on disk
+          var value = fields.length > 1 ? fieldIdx : undefined;
+          emit(TYPE_TOKEN_COUNT + term, value);
+        });
+        fieldLenNorm = Math.sqrt(terms.length);
+      } else {
+        fieldLenNorm = 0;
       }
+      docInfo.push(fieldLenNorm);
     });
-    terms.forEach(function (term) {
-      emit(TYPE_TOKEN_COUNT + term);
-    });
-    var docLenNorm = Math.sqrt(terms.length);
-    emit(TYPE_DOC_LEN_NORM + doc._id, docLenNorm);
+
+    emit(TYPE_DOC_INFO + doc._id, docInfo);
   };
 
   // usually it doesn't matter if the user types the same
@@ -116,11 +136,12 @@ exports.search = utils.toPromise(function (opts, callback) {
       return callback(null, []);
     }
 
-    var docIdsToQueryTerms = {};
+    var docIdsToFieldsToQueryTerms = {};
     var termDFs = {};
 
     res.rows.forEach(function (row) {
       var term = row.key.substring(1);
+      var field = row.value || 0;
 
       // calculate termDFs
       if (!(term in termDFs)) {
@@ -129,11 +150,15 @@ exports.search = utils.toPromise(function (opts, callback) {
         termDFs[term]++;
       }
 
-      // calculate docIdsToQueryTerms
-      if (!(row.id in docIdsToQueryTerms)) {
-        docIdsToQueryTerms[row.id] = {};
+      // calculate docIdsToFieldsToQueryTerms
+      if (!(row.id in docIdsToFieldsToQueryTerms)) {
+        var arr = docIdsToFieldsToQueryTerms[row.id] = [];
+        for (var i = 0; i < fields.length; i++) {
+          arr[i] = {};
+        }
       }
-      var docTerms = docIdsToQueryTerms[row.id];
+
+      var docTerms = docIdsToFieldsToQueryTerms[row.id][field];
       if (!(term in docTerms)) {
         docTerms[term] = 1;
       } else {
@@ -142,20 +167,29 @@ exports.search = utils.toPromise(function (opts, callback) {
     });
 
     // apply the minimum should match (mm)
-    Object.keys(docIdsToQueryTerms).forEach(function (docId) {
-      var numMatchingTerms = Object.keys(docIdsToQueryTerms[docId]).length;
-      var matchingRatio = numMatchingTerms / queryTerms.length;
-      if ((Math.floor(matchingRatio * 100) / 100) < mm) {
-        delete docIdsToQueryTerms[docId]; // ignore this doc
-      }
-    });
+    if (queryTerms.length > 1) {
+      Object.keys(docIdsToFieldsToQueryTerms).forEach(function (docId) {
+        var allMatchingTerms = {};
+        var fieldsToQueryTerms = docIdsToFieldsToQueryTerms[docId];
+        Object.keys(fieldsToQueryTerms).forEach(function (field) {
+          Object.keys(fieldsToQueryTerms[field]).forEach(function (term) {
+            allMatchingTerms[term] = true;
+          });
+        });
+        var numMatchingTerms = Object.keys(allMatchingTerms).length;
+        var matchingRatio = numMatchingTerms / queryTerms.length;
+        if ((Math.floor(matchingRatio * 100) / 100) < mm) {
+          delete docIdsToFieldsToQueryTerms[docId]; // ignore this doc
+        }
+      });
+    }
 
-    if (!Object.keys(docIdsToQueryTerms).length) {
+    if (!Object.keys(docIdsToFieldsToQueryTerms).length) {
       return callback(null, []);
     }
 
-    var keys = Object.keys(docIdsToQueryTerms).map(function (docId) {
-      return TYPE_DOC_LEN_NORM + docId;
+    var keys = Object.keys(docIdsToFieldsToQueryTerms).map(function (docId) {
+      return TYPE_DOC_INFO + docId;
     });
 
     var queryOpts = {
@@ -166,14 +200,14 @@ exports.search = utils.toPromise(function (opts, callback) {
     // step 2
     return pouch.query(mapFun, queryOpts).then(function (res) {
 
-      var docIdsToDocLenNorms = {};
+      var docIdsToFieldsToNorms = {};
       res.rows.forEach(function (row) {
-        docIdsToDocLenNorms[row.id] = row.value;
+        docIdsToFieldsToNorms[row.id] = row.value;
       });
       // step 3
       // now we have all information, so calculate cosine similarity
       callback(null, calculateCosineSim(queryTerms, termDFs,
-        docIdsToQueryTerms, docIdsToDocLenNorms));
+        docIdsToFieldsToQueryTerms, docIdsToFieldsToNorms));
     });
   }).catch(callback);
 });
