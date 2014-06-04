@@ -32,6 +32,7 @@ dbs.split(',').forEach(function (db) {
 
 var docs = require('./docs/test-docs');
 var docs2 = require('./docs/test-docs-2');
+var docs3 = require('./docs/test-docs-3');
 
 function tests(dbName, dbType) {
 
@@ -196,6 +197,53 @@ function tests(dbName, dbType) {
       }).then(function (rows) {
         var ids = rows.map(function (x) { return x.id; });
         ids.should.deep.equal(['1'], 'got incorrect docs: ' + JSON.stringify(rows));
+      });
+    });
+
+    it('should weight short fields more strongly', function () {
+      return db.bulkDocs({docs: docs3}).then(function () {
+        var opts = {
+          fields: ['title', 'text', 'desc'],
+          q: 'yoshi'
+        };
+        return db.search(opts);
+      }).then(function (rows) {
+        var ids = rows.map(function (x) { return x.id; });
+        ids.should.deep.equal(['1', '2'], 'got incorrect docs: ' + JSON.stringify(rows));
+        rows[0].score.should.not.equal(rows[1].score, 'score should be higher');
+      });
+    });
+
+    it('should weight short fields more strongly part 2', function () {
+      return db.bulkDocs({docs: docs3}).then(function () {
+        var opts = {
+          fields: ['title', 'text', 'desc'],
+          q: 'mario'
+        };
+        return db.search(opts);
+      }).then(function (rows) {
+        var ids = rows.map(function (x) { return x.id; });
+        ids.should.deep.equal(['2', '1'], 'got incorrect docs: ' + JSON.stringify(rows));
+        rows[0].score.should.not.equal(rows[1].score, 'score should be higher');
+      });
+    });
+
+    it('should use dismax weighting', function () {
+      // see http://lucene.apache.org/core/3_0_3/api/core/org/apache/
+      //     lucene/search/DisjunctionMaxQuery.html
+      // for why this example makes sense
+
+      return db.bulkDocs({docs: docs3}).then(function () {
+        var opts = {
+          fields: ['title', 'text', 'desc'],
+          q: 'albino elephant',
+          mm: '50%'
+        };
+        return db.search(opts);
+      }).then(function (rows) {
+        var ids = rows.map(function (x) { return x.id; });
+        ids.should.deep.equal(['3', '4'], 'got incorrect docs: ' + JSON.stringify(rows));
+        rows[0].score.should.not.equal(rows[1].score, 'score should be higher');
       });
     });
   });
