@@ -175,9 +175,7 @@ exports.search = utils.toPromise(function (opts, callback) {
       callback(null, calculateCosineSim(queryTerms, termDFs,
         docIdsToQueryTerms, docIdsToDocLenNorms));
     });
-  }).catch(function (err) {
-    callback(err);
-  });
+  }).catch(callback);
 });
 
 /* istanbul ignore next */

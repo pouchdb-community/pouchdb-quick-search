@@ -30,7 +30,8 @@ dbs.split(',').forEach(function (db) {
   tests(db, dbType);
 });
 
-var docs = require('./test-docs');
+var docs = require('./docs/test-docs');
+var docs2 = require('./docs/test-docs-2');
 
 function tests(dbName, dbType) {
 
@@ -59,7 +60,32 @@ function tests(dbName, dbType) {
         rows[0].score.should.be.above(0);
       });
     });
-    
+
+    it('basic search - zero results', function () {
+      return db.bulkDocs({docs: docs}).then(function () {
+        var opts = {
+          fields: ['title', 'text', 'desc'],
+          q: 'fizzbuzz'
+        };
+        return db.search(opts);
+      }).then(function (rows) {
+        rows.length.should.equal(0);
+      });
+    });
+
+    it('basic search - equal scores', function () {
+      return db.bulkDocs({docs: docs2}).then(function () {
+        var opts = {
+          fields: ['title', 'text', 'desc'],
+          q: 'text'
+        };
+        return db.search(opts);
+      }).then(function (rows) {
+        rows.length.should.equal(2);
+        rows[0].score.should.equal(rows[1].score);
+      });
+    });
+
     it('basic search - ordering', function () {
       
       // the word "court" is used once in the first doc,
