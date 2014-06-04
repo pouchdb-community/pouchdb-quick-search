@@ -61,6 +61,7 @@ function calculateCosineSim(queryTerms, termDFs, docIdsToQueryTerms,
 exports.search = utils.toPromise(function (opts, callback) {
   var pouch = this;
   var q = opts.q;
+  var mm = 'mm' in opts ? (parseFloat(opts.mm) / 100) : 1; // e.g. '75%'
   var fields = opts.fields;
   var persistedIndexName = 'search-' + utils.MD5(JSON.stringify(fields));
 
@@ -100,9 +101,9 @@ exports.search = utils.toPromise(function (opts, callback) {
   //
   // note that we follow the Lucene convention (established in
   // DefaultSimilarity.java) of computing doc-len-norm as
-  // 1 / Math.sqrt(numTerms)
+  // Math.sqrt(numTerms)
   // which is an optimization that avoids having to look up every term
-  // in that document and fully recompute its norm scores based on tf-idf
+  // in that document and fully recompute its scores based on tf-idf
   // More info:
   // https://lucene.apache.org/core/3_6_0/api/core/org/apache/lucene/search/Similarity.html
   //
@@ -139,6 +140,19 @@ exports.search = utils.toPromise(function (opts, callback) {
         docTerms[term]++;
       }
     });
+
+    // apply the minimum should match (mm)
+    Object.keys(docIdsToQueryTerms).forEach(function (docId) {
+      var numMatchingTerms = Object.keys(docIdsToQueryTerms[docId]).length;
+      var matchingRatio = numMatchingTerms / queryTerms.length;
+      if ((Math.floor(matchingRatio * 100) / 100) < mm) {
+        delete docIdsToQueryTerms[docId]; // ignore this doc
+      }
+    });
+
+    if (!Object.keys(docIdsToQueryTerms).length) {
+      return callback(null, []);
+    }
 
     var keys = Object.keys(docIdsToQueryTerms).map(function (docId) {
       return TYPE_DOC_LEN_NORM + docId;

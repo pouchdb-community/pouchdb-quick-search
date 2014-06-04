@@ -79,5 +79,98 @@ function tests(dbName, dbType) {
         ids.should.deep.equal(['2', '3', '1'], 'got incorrect doc order: ' + JSON.stringify(rows));
       });
     });
+
+    it('search with mm=100% and 1/2 match', function () {
+
+      // if mm (minimum should match) is 100%, that means all terms in the
+      // query must be present in the document. I find this most intuitive,
+      // so it's the default
+
+      // docs 1 and 2 both contain the word 'title', but only 1 contains
+      // both of the words 'title' and 'clouded'
+
+      return db.bulkDocs({docs: docs}).then(function () {
+        var opts = {
+          fields: ['title', 'text', 'desc'],
+          q: 'clouded title',
+          mm: '100%'
+        };
+        return db.search(opts);
+      }).then(function (rows) {
+        var ids = rows.map(function (x) { return x.id; });
+        ids.should.deep.equal(['1'], 'got incorrect docs: ' + JSON.stringify(rows));
+      });
+    });
+
+    it('search with mm=50% and 2/2 match', function () {
+      return db.bulkDocs({docs: docs}).then(function () {
+        var opts = {
+          fields: ['title', 'text', 'desc'],
+          q: 'clouded title',
+          mm: '50%'
+        };
+        return db.search(opts);
+      }).then(function (rows) {
+        var ids = rows.map(function (x) { return x.id; });
+        ids.should.deep.equal(['1', '2'], 'got incorrect docs: ' + JSON.stringify(rows));
+      });
+    });
+
+    it('search with mm=1% and 1/3 match', function () {
+      return db.bulkDocs({docs: docs}).then(function () {
+        var opts = {
+          fields: ['title', 'text', 'desc'],
+          q: 'clouded nonsenseword anothernonsenseword',
+          mm: '1%'
+        };
+        return db.search(opts);
+      }).then(function (rows) {
+        var ids = rows.map(function (x) { return x.id; });
+        ids.should.deep.equal(['1'], 'got incorrect docs: ' + JSON.stringify(rows));
+      });
+    });
+
+    it('search with mm=34% and 1/3 match', function () {
+      // should be rounded down to two decimal places ala Solr
+      return db.bulkDocs({docs: docs}).then(function () {
+        var opts = {
+          fields: ['title', 'text', 'desc'],
+          q: 'clouded nonsenseword anothernonsenseword',
+          mm: '34%'
+        };
+        return db.search(opts);
+      }).then(function (rows) {
+        var ids = rows.map(function (x) { return x.id; });
+        ids.should.deep.equal([], 'got incorrect docs: ' + JSON.stringify(rows));
+      });
+    });
+    it('search with mm=34% and 2/3 match', function () {
+      // should be rounded down to two decimal places ala Solr
+      return db.bulkDocs({docs: docs}).then(function () {
+        var opts = {
+          fields: ['title', 'text', 'desc'],
+          q: 'clouded title anothernonsenseword',
+          mm: '34%'
+        };
+        return db.search(opts);
+      }).then(function (rows) {
+        var ids = rows.map(function (x) { return x.id; });
+        ids.should.deep.equal(['1'], 'got incorrect docs: ' + JSON.stringify(rows));
+      });
+    });
+    it('search with mm=33% and 1/3 match', function () {
+      // should be rounded down to two decimal places ala Solr
+      return db.bulkDocs({docs: docs}).then(function () {
+        var opts = {
+          fields: ['title', 'text', 'desc'],
+          q: 'clouded nonsenseword anothernonsenseword',
+          mm: '33%'
+        };
+        return db.search(opts);
+      }).then(function (rows) {
+        var ids = rows.map(function (x) { return x.id; });
+        ids.should.deep.equal(['1'], 'got incorrect docs: ' + JSON.stringify(rows));
+      });
+    });
   });
 }
