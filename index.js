@@ -1,42 +1,24 @@
 'use strict';
 
 var utils = require('./pouch-utils');
-var Promise = utils.Promise;
 var lunr = require('lunr');
-var flatten = require('flatten');
 var uniq = require('uniq');
 
 var index = lunr();
 
 var TYPE_TOKEN_COUNT = 'a';
-var TYPE_DOC_TOKEN_COUNT = 'b';
+var TYPE_DOC_LEN_NORM = 'b';
 
 function add(left, right) {
   return left + right;
-}
-
-// return a map of terms to counts, e.g.
-// {foo: 1, bar: 2}
-function getTermCounts(terms) {
-  var res = {};
-  var i = -1;
-  var len = terms.length;
-  while (++i < len) {
-    var term = terms[i];
-    if (term in res) {
-      res[term]++;
-    } else {
-      res[term] = 1;
-    }
-  }
-  return res;
 }
 
 function getTokenStream(text) {
   return index.pipeline.run(lunr.tokenizer(text));
 }
 
-function calculateCosineSim(queryTerms, docIdsToTermCounts, termDFs) {
+function calculateCosineSim(queryTerms, termDFs, docIdsToQueryTerms,
+                            docIdsToDocLenNorms) {
   // calculate cosine similarity using tf-idf, which is equal to
   // dot-product(q, d) / (norm(q) * norm(doc))
   // although there is no point in calculating the query norm,
@@ -46,31 +28,22 @@ function calculateCosineSim(queryTerms, docIdsToTermCounts, termDFs) {
   // then we return a sorted list of results, like:
   // [{id: {...}, score: 0.2}, {id: {...}, score: 0.1}];
 
-  var results = Object.keys(docIdsToTermCounts).map(function (docId) {
-    var termCounts = docIdsToTermCounts[docId];
-
-    var termScores = {};
-    Object.keys(termCounts).forEach(function (term) {
-      var termDF = termDFs[term];
-      var termTF = termCounts[term];
-      var score = termTF / termDF;
-      termScores[term] = score;
-    });
-
-    var docNorm = Object.keys(termScores).map(function (term) {
-      return Math.pow(termScores[term], 2);
-    }).reduce(add, 0);
+  var results = Object.keys(docIdsToQueryTerms).map(function (docId) {
+    var docQueryTermsToCounts = docIdsToQueryTerms[docId];
+    var docLenNorm = docIdsToDocLenNorms[docId];
 
     var dotProduct = queryTerms.map(function (queryTerm) {
-      if (!(queryTerm in termScores)) {
+      if (!(queryTerm in docQueryTermsToCounts)) {
         return 0;
       }
-      var docScore = termScores[queryTerm];
-      var queryScore = 1 / termDFs[queryTerm];
+      var termDF = termDFs[queryTerm];
+      var termTF = docQueryTermsToCounts[queryTerm];
+      var docScore = termTF / termDF; // TF-IDF for doc
+      var queryScore = 1 / termDF; // TF-IDF for query, count assumed to be 1
       return docScore * queryScore;
     }).reduce(add, 0);
 
-    var finalScore = dotProduct / docNorm;
+    var finalScore = dotProduct / docLenNorm;
 
     return {
       id: docId,
@@ -102,17 +75,17 @@ exports.search = utils.toPromise(function (opts, callback) {
       }
     });
     terms.forEach(function (term) {
-      emit([TYPE_TOKEN_COUNT, term]);
+      emit(TYPE_TOKEN_COUNT + term);
     });
-    var termCounts = getTermCounts(terms);
-    emit([TYPE_DOC_TOKEN_COUNT, doc._id], termCounts);
+    var docLenNorm = Math.sqrt(terms.length);
+    emit(TYPE_DOC_LEN_NORM + doc._id, docLenNorm);
   };
 
   // usually it doesn't matter if the user types the same
   // token more than once, in fact I think even Lucene does this
   var queryTerms = uniq(getTokenStream(q));
   var keys = queryTerms.map(function (queryTerm) {
-    return [TYPE_TOKEN_COUNT, queryTerm];
+    return TYPE_TOKEN_COUNT + queryTerm;
   });
   var queryOpts = {
     saveAs: persistedIndexName,
@@ -122,9 +95,16 @@ exports.search = utils.toPromise(function (opts, callback) {
   // search algorithm, basically classic TF-IDF
   //
   // step 1: get the docs associated with the terms in the query
-  // step 2: get all terms associated with those docs
-  // step 3: get the IDF counts for all those terms
-  // step 4: calculate cosine similarity using tf-idf
+  // step 2: get the doc-len-norms of those documents
+  // step 3: calculate cosine similarity using tf-idf
+  //
+  // note that we follow the Lucene convention (established in
+  // DefaultSimilarity.java) of computing doc-len-norm as
+  // 1 / Math.sqrt(numTerms)
+  // which is an optimization that avoids having to look up every term
+  // in that document and fully recompute its norm scores based on tf-idf
+  // More info:
+  // https://lucene.apache.org/core/3_6_0/api/core/org/apache/lucene/search/Similarity.html
   //
 
 
@@ -135,12 +115,33 @@ exports.search = utils.toPromise(function (opts, callback) {
       return callback(null, []);
     }
 
-    var docIds = uniq(res.rows.map(function (row) {
-      return row.id;
-    }));
+    var docIdsToQueryTerms = {};
+    var termDFs = {};
 
-    var keys = docIds.map(function (docId) {
-      return [TYPE_DOC_TOKEN_COUNT, docId];
+    res.rows.forEach(function (row) {
+      var term = row.key.substring(1);
+
+      // calculate termDFs
+      if (!(term in termDFs)) {
+        termDFs[term] = 1;
+      } else {
+        termDFs[term]++;
+      }
+
+      // calculate docIdsToQueryTerms
+      if (!(row.id in docIdsToQueryTerms)) {
+        docIdsToQueryTerms[row.id] = {};
+      }
+      var docTerms = docIdsToQueryTerms[row.id];
+      if (!(term in docTerms)) {
+        docTerms[term] = 1;
+      } else {
+        docTerms[term]++;
+      }
+    });
+
+    var keys = Object.keys(docIdsToQueryTerms).map(function (docId) {
+      return TYPE_DOC_LEN_NORM + docId;
     });
 
     var queryOpts = {
@@ -151,31 +152,14 @@ exports.search = utils.toPromise(function (opts, callback) {
     // step 2
     return pouch.query(mapFun, queryOpts).then(function (res) {
 
-      var docIdsToTermCounts = {};
+      var docIdsToDocLenNorms = {};
       res.rows.forEach(function (row) {
-        docIdsToTermCounts[row.id] = row.value;
+        docIdsToDocLenNorms[row.id] = row.value;
       });
-
-      var allUniqTerms = uniq(flatten(res.rows.map(function (row) {
-        return Object.keys(row.value);
-      })));
-
-      var termDFs = {};
       // step 3
-      return Promise.all(allUniqTerms.map(function (term) {
-        var queryOpts = {
-          saveAs: persistedIndexName,
-          key : [TYPE_TOKEN_COUNT, term]
-        };
-        return pouch.query(mapFun, queryOpts);
-      })).then(function (allResults) {
-        for (var i = 0, len = allResults.length; i < len; i++) {
-          termDFs[allUniqTerms[i]] = allResults[i].rows.length;
-        }
-        // step 4
-        // now we have all information, so calculate cosine similarity
-        callback(null, calculateCosineSim(queryTerms, docIdsToTermCounts, termDFs));
-      });
+      // now we have all information, so calculate cosine similarity
+      callback(null, calculateCosineSim(queryTerms, termDFs,
+        docIdsToQueryTerms, docIdsToDocLenNorms));
     });
   }).catch(function (err) {
     callback(err);
