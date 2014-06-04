@@ -38,6 +38,7 @@
     "inherits": "~2.0.1",
     "lie": "^2.6.0",
     "lunr": "0.5.3",
+    "md5-jkmyers": "0.0.1",
     "uniq": "^1.0.1"
   },
   "devDependencies": {
@@ -67,5 +68,8 @@
     "transform": [
       "es3ify"
     ]
+  },
+  "browser": {
+    "crypto": false
   }
 }

@@ -5,6 +5,7 @@ var Promise = utils.Promise;
 var lunr = require('lunr');
 var flatten = require('flatten');
 var uniq = require('uniq');
+
 var index = lunr();
 
 var TYPE_TOKEN_COUNT = 'a';
@@ -88,7 +89,7 @@ exports.search = utils.toPromise(function (opts, callback) {
   var pouch = this;
   var q = opts.q;
   var fields = opts.fields;
-  var persistedIndexName = JSON.stringify(fields);
+  var persistedIndexName = 'search-' + utils.MD5(JSON.stringify(fields));
 
   var mapFun = function (doc, emit) {
     // just add all tokens from all fields for now
@@ -100,10 +101,9 @@ exports.search = utils.toPromise(function (opts, callback) {
         terms = terms.concat(getTokenStream(text));
       }
     });
-    for (var i = 0, len = terms.length; i < len; i++) {
-      var term = terms[i];
+    terms.forEach(function (term) {
       emit([TYPE_TOKEN_COUNT, term]);
-    }
+    });
     var termCounts = getTermCounts(terms);
     emit([TYPE_DOC_TOKEN_COUNT, doc._id], termCounts);
   };
