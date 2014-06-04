@@ -53,7 +53,7 @@
     "pouchdb": "pouchdb/pouchdb",
     "request": "^2.36.0",
     "sauce-connect-launcher": "^0.4.2",
-    "uglifyjs": "^2.3.6",
+    "uglify-js": "^2.4.13",
     "watchify": "~0.4.1",
     "wd": "^0.2.21"
   },
