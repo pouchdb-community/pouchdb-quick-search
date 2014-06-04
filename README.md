@@ -1,9 +1,17 @@
-PouchDB Search v2
+PouchDB Quick Search
 =====
 
-[![Build Status](https://travis-ci.org/nolanlawson/pouchdb-search-v2.svg)](https://travis-ci.org/nolanlawson/pouchdb-search-v2)
+[![Build Status](https://travis-ci.org/nolanlawson/pouchdb-quick-search.svg)](https://travis-ci.org/nolanlawson/pouchdb-quick-search)
 
-Nothing much to see here yet; this is just a demonstration.
+**Nothing much to see here yet; this is a work in progress.**
+
+A very efficient and accurate Lucene-style search engine built on top of PouchDB. Analyzes English text, indexes it in the database, and allows you to query for documents using a simple API. Ideal for PhoneGap apps or any webapp that needs offline search support.
+
+This is a local plugin, so it is not designed to work against CouchDB/Cloudant/etc.  If you'd like to search against the server, use the CouchDB Lucene plugin or similar.
+
+If you need prefix search (e.g. for autocompletion), then just use PouchDB itself.  The `allDocs()`/`query()` APIs plus `startkey` give you everything you need for lookups by prefix.
+
+The underlying tokenization/stemming/stopword engine is Lunr. If you'd like to see support for other languages, go bug them to add more than just English.
 
 Building
 ----
