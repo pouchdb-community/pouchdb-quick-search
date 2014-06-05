@@ -60,7 +60,7 @@ API
 
 ```js
 pouch.search({
-  query: 'kong',
+  query: 'your query here',
   fields: ['title', 'text']
 }).then(function (res) {
   // handle results
@@ -81,13 +81,13 @@ pouch.search({
 }
 ```
 
-In the simplest case, you call `pouch.search()` with a `query` and a list of document `fields` to search.  If the document is missing that field, then it's simply skipped.  You can search one or more fields at a time.
+In the simplest case, you call `pouch.search()` with a `query` and a list of document `field`s to search.  If the document is missing that field, then it's simply skipped.  You can search one or more fields at a time.
 
-Like PouchDB, the `search()` function returns a promise, but if you like callbacks, you can also use that style:
+Like most PouchDB functions, the `search()` function returns a promise. But if you like callbacks, you can also use that style:
 
 ```js
 pouch.search({
-  query: 'kong',
+  query: 'your query here',
   fields: ['title', 'text']
 }, function (err, res) {
   if (err) {
@@ -100,7 +100,7 @@ pouch.search({
 
 ### Fetching the full documents
 
-Notice that by default, you only get back the matching document `id`s and `score`s. You can also use `{include_docs: true}` to get back the full documents:
+By default, you only get back the matching document `id`s and `score`s. You can also use `{include_docs: true}` to get back the full documents:
 
 ```js
 pouch.search({
@@ -109,7 +109,6 @@ pouch.search({
   include_docs: true
 });
 ```
-
 
 **Response:**
 
@@ -152,7 +151,7 @@ pouch.search({
 
 ### Highlighting
 
-A very handy option is `{highlighting: true}`, which returns the fields that were matched against, with the keywords highlighted in context:
+A very handy option is `{highlighting: true}`, which returns the fields that the query matched, along with the keywords highlighted in context:
 
 ```js
 pouch.search({
@@ -249,14 +248,14 @@ pouch.search({
 });
 ```
 
-The performance concerns for `skip` that apply to `allDocs()`/`query()` do not apply so much here, because no matter what, we have to read in all the doc IDs and calculate their score in order to sort them correctly. In other words, it is guaranteed that you will read the doc IDs of all matching documents into memory at once, no matter what values you set for `limit` and `skip`.
+The performance concerns for `skip` that apply to `allDocs()`/`query()` do not apply so much here, because no matter what, we have to read in all the doc IDs and calculate their score in order to sort them correctly. In other words, it is guaranteed that you will read the doc IDs of all matching documents into memory, no matter what values you set for `limit` and `skip`.
 
 What this will optimize, however, is the attachment of metadata like `doc` and `highlighting` &ndash; it will only be done for the subset of results that you want.
 
 
 ### Boosting fields
 
-Fields may be boosted:
+Fields may be boosted, if you pass in an object rather than an array:
 
 ```js
 pouch.search({
@@ -274,7 +273,7 @@ The default boost is `1`.  Shorter fields are naturally boosted relative to long
 
 By default, every term in a query other than stopwords _must_ appear somewhere in the document in order for it to be matched.  If you want to relax this to allow just a subset of the terms to match, use the `mm` ("minimum should match") option, which is modeled after [Solr's `mm` option](https://wiki.apache.org/solr/DisMaxQParserPlugin#mm_.28Minimum_.27Should.27_Match.29).
 
-Docs must contain both the terms `'donkey'` and `'kong'`:
+Example 1: docs must contain both the terms `'donkey'` and `'kong'`:
 
 ```js
 pouch.search({
@@ -283,7 +282,7 @@ pouch.search({
 });
 ```
 
-Docs can contain either of the terms `'donkey'` and `'kong'`:
+Example 2: docs must contain either of the terms `'donkey'` and `'kong'`:
 
 ```js
 pouch.search({
@@ -293,7 +292,7 @@ pouch.search({
 });
 ```
 
-Docs must contain at least one of the three terms `'donkey'`, `'kong'`, and `'country'`:
+Example 3: docs must contain at least one of the three terms `'donkey'`, `'kong'`, and `'country'`:
 
 ```js
 pouch.search({
@@ -307,9 +306,9 @@ The default `mm` value is `100%`.  All values must be provided as a percentage (
 
 ### Updating an index
 
-When you search, a [persistent map/reduce index](http://pouchdb.com/api.html#query_database) is created behind the scenes, in order to save the indexed documents and provide the fastest possible queries.
+When you search, a [persistent map/reduce index](http://pouchdb.com/api.html#query_database) is created behind the scenes, in order to save the indexed data and provide the fastest possible queries.
 
-This means that the performance constraints that apply to the `query()` API also apply here.  In other words, the first time you query, it will be slow because it has to build up the index.  After the first time, it will be much faster.
+This means that the performance constraints that apply to the `query()` API also apply here.  In other words, the first time you query, it will be slow because it has to build up the index, but after the first time, it will be much faster.
 
 You can also use the `stale` option, as in the `query()` API, e.g.:
 
