@@ -21,10 +21,11 @@ function getTokenStream(text) {
 exports.search = utils.toPromise(function (opts, callback) {
   var pouch = this;
   opts = utils.extend(true, {}, opts);
-  var q = opts.q;
+  var q = opts.query || opts.q;
   var mm = 'mm' in opts ? (parseFloat(opts.mm) / 100) : 1; // e.g. '75%'
   var fields = opts.fields;
   var highlighting = opts.highlighting;
+  var includeDocs = opts.include_docs;
   var persistedIndexName = 'search-' + utils.MD5(JSON.stringify(fields));
   var destroy = opts.destroy;
   var stale = opts.stale;
@@ -179,14 +180,19 @@ exports.search = utils.toPromise(function (opts, callback) {
       // now we have all information, so calculate cosine similarity
       var rows = calculateCosineSim(queryTerms, termDFs,
         docIdsToFieldsToQueryTerms, docIdsToFieldsToNorms, fieldBoosts);
-      var result = {rows: rows};
-
+      return rows;
+    }).then(function (rows) {
       if (highlighting) {
-        applyHighlighting(pouch, opts, rows, fieldBoosts,
-            docIdsToFieldsToQueryTerms, callback);
-        return;
+        return applyHighlighting(pouch, opts, rows, fieldBoosts, docIdsToFieldsToQueryTerms);
       }
-      callback(null, result);
+      return rows;
+    }).then(function (rows) {
+      if (includeDocs) {
+        return applyIncludeDocs(pouch, rows);
+      }
+      return rows;
+    }).then(function (rows) {
+      callback(null, {rows: rows});
     });
   }).catch(callback);
 });
@@ -248,17 +254,30 @@ function calculateCosineSim(queryTerms, termDFs, docIdsToFieldsToQueryTerms,
   return results;
 }
 
+function applyIncludeDocs(pouch, rows) {
+  return Promise.all(rows.map(function (row) {
+    return pouch.get(row.id);
+  })).then(function (docs) {
+    docs.forEach(function (doc, i) {
+      rows[i].doc = doc;
+    });
+  }).then(function () {
+    return rows;
+  });
+}
+
 // create a convenient object showing highlighting results
 // this is designed to be like solr's highlighting feature, so it
 // should return something like
 // {'fieldname': 'here is some <strong>highlighted text</strong>.'}
 //
 function applyHighlighting(pouch, opts, rows, fieldBoosts,
-                           docIdsToFieldsToQueryTerms, callback) {
-  var pre = opts.highlightingBefore || '<strong>';
-  var post = opts.highlightingAfter || '</strong>';
+                           docIdsToFieldsToQueryTerms) {
 
-  Promise.all(rows.map(function (row) {
+  var pre = opts.highlighting_pre || '<strong>';
+  var post = opts.highlighting_post || '</strong>';
+
+  return Promise.all(rows.map(function (row) {
     return pouch.get(row.id).then(function (doc) {
       row.highlighting = {};
       docIdsToFieldsToQueryTerms[row.id].forEach(function (queryTerms, i) {
@@ -275,8 +294,8 @@ function applyHighlighting(pouch, opts, rows, fieldBoosts,
       });
     });
   })).then(function () {
-    callback(null, {rows: rows});
-  }).catch(callback);
+    return rows;
+  });
 }
 
 /* istanbul ignore next */

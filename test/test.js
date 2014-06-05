@@ -15,7 +15,7 @@ chai.use(require("chai-as-promised"));
 //
 // more variables you might want
 //
-chai.should(); // var should = chai.should();
+var should = chai.should(); // var should = chai.should();
 require('bluebird'); // var Promise = require('bluebird');
 
 var dbs;
@@ -52,7 +52,7 @@ function tests(dbName, dbType) {
       return db.bulkDocs({docs: docs}).then(function () {
         var opts = {
           fields: ['title', 'text', 'desc'],
-          q: 'sketch'
+          query: 'sketch'
         };
         return db.search(opts);
       }).then(function (res) {
@@ -66,7 +66,7 @@ function tests(dbName, dbType) {
       return db.bulkDocs({docs: docs}).then(function () {
         var opts = {
           fields: ['title', 'text', 'desc'],
-          q: 'fizzbuzz'
+          query: 'fizzbuzz'
         };
         return db.search(opts);
       }).then(function (res) {
@@ -78,7 +78,7 @@ function tests(dbName, dbType) {
       return db.bulkDocs({docs: docs2}).then(function () {
         var opts = {
           fields: ['title', 'text', 'desc'],
-          q: 'text'
+          query: 'text'
         };
         return db.search(opts);
       }).then(function (res) {
@@ -97,7 +97,7 @@ function tests(dbName, dbType) {
       return db.bulkDocs({docs: docs}).then(function () {
         var opts = {
           fields: ['title', 'text', 'desc'],
-          q: 'court'
+          query: 'court'
         };
         return db.search(opts);
       }).then(function (res) {
@@ -119,7 +119,7 @@ function tests(dbName, dbType) {
       return db.bulkDocs({docs: docs}).then(function () {
         var opts = {
           fields: ['title', 'text', 'desc'],
-          q: 'clouded title',
+          query: 'clouded title',
           mm: '100%'
         };
         return db.search(opts);
@@ -133,7 +133,7 @@ function tests(dbName, dbType) {
       return db.bulkDocs({docs: docs}).then(function () {
         var opts = {
           fields: ['title', 'text', 'desc'],
-          q: 'clouded title',
+          query: 'clouded title',
           mm: '50%'
         };
         return db.search(opts);
@@ -147,7 +147,7 @@ function tests(dbName, dbType) {
       return db.bulkDocs({docs: docs}).then(function () {
         var opts = {
           fields: ['title', 'text', 'desc'],
-          q: 'clouded nonsenseword anothernonsenseword',
+          query: 'clouded nonsenseword anothernonsenseword',
           mm: '1%'
         };
         return db.search(opts);
@@ -162,7 +162,7 @@ function tests(dbName, dbType) {
       return db.bulkDocs({docs: docs}).then(function () {
         var opts = {
           fields: ['title', 'text', 'desc'],
-          q: 'clouded nonsenseword anothernonsenseword',
+          query: 'clouded nonsenseword anothernonsenseword',
           mm: '34%'
         };
         return db.search(opts);
@@ -176,7 +176,7 @@ function tests(dbName, dbType) {
       return db.bulkDocs({docs: docs}).then(function () {
         var opts = {
           fields: ['title', 'text', 'desc'],
-          q: 'clouded title anothernonsenseword',
+          query: 'clouded title anothernonsenseword',
           mm: '34%'
         };
         return db.search(opts);
@@ -190,7 +190,7 @@ function tests(dbName, dbType) {
       return db.bulkDocs({docs: docs}).then(function () {
         var opts = {
           fields: ['title', 'text', 'desc'],
-          q: 'clouded nonsenseword anothernonsenseword',
+          query: 'clouded nonsenseword anothernonsenseword',
           mm: '33%'
         };
         return db.search(opts);
@@ -204,7 +204,7 @@ function tests(dbName, dbType) {
       return db.bulkDocs({docs: docs3}).then(function () {
         var opts = {
           fields: ['title', 'text', 'desc'],
-          q: 'yoshi'
+          query: 'yoshi'
         };
         return db.search(opts);
       }).then(function (res) {
@@ -218,7 +218,7 @@ function tests(dbName, dbType) {
       return db.bulkDocs({docs: docs3}).then(function () {
         var opts = {
           fields: ['title', 'text', 'desc'],
-          q: 'mario'
+          query: 'mario'
         };
         return db.search(opts);
       }).then(function (res) {
@@ -236,7 +236,7 @@ function tests(dbName, dbType) {
       return db.bulkDocs({docs: docs3}).then(function () {
         var opts = {
           fields: ['title', 'text', 'desc'],
-          q: 'albino elephant',
+          query: 'albino elephant',
           mm: '50%'
         };
         return db.search(opts);
@@ -251,7 +251,7 @@ function tests(dbName, dbType) {
       return db.bulkDocs({docs: docs3}).then(function () {
         var opts = {
           fields: ['text'],
-          q: 'mario'
+          query: 'mario'
         };
         return db.search(opts);
       }).then(function (res) {
@@ -263,7 +263,7 @@ function tests(dbName, dbType) {
     it('should be able to delete', function () {
       var opts = {
         fields: ['text'],
-        q: 'mario'
+        query: 'mario'
       };
       return db.bulkDocs({docs: docs3}).then(function () {
         return db.search(opts);
@@ -285,7 +285,7 @@ function tests(dbName, dbType) {
       return db.bulkDocs({docs: docs3}).then(function () {
         var opts = {
           fields: ['text'],
-          q: 'to be or not to be'
+          query: 'to be or not to be'
         };
         return db.search(opts);
       }).then(function (res) {
@@ -297,7 +297,7 @@ function tests(dbName, dbType) {
       return db.bulkDocs({docs: docs3}).then(function () {
         var opts = {
           fields: {'text': 10, 'title': 1},
-          q: 'mario'
+          query: 'mario'
         };
         return db.search(opts);
       }).then(function (res) {
@@ -311,7 +311,7 @@ function tests(dbName, dbType) {
       return db.bulkDocs({docs: docs3}).then(function () {
         var opts = {
           fields: {'text': 10, 'title': 1},
-          q: 'yoshi'
+          query: 'yoshi'
         };
         return db.search(opts);
       }).then(function (res) {
@@ -325,7 +325,7 @@ function tests(dbName, dbType) {
       return db.bulkDocs({docs: docs3}).then(function () {
         var opts = {
           fields: {'text': 1, 'title': 1},
-          q: 'yoshi',
+          query: 'yoshi',
           highlighting: true
         };
         return db.search(opts);
@@ -345,10 +345,10 @@ function tests(dbName, dbType) {
       return db.bulkDocs({docs: docs3}).then(function () {
         var opts = {
           fields: {'text': 1, 'title': 1},
-          q: 'yoshi',
+          query: 'yoshi',
           highlighting: true,
-          highlightingBefore: '<em>',
-          highlightingAfter: '</em>'
+          highlighting_pre: '<em>',
+          highlighting_post: '</em>'
         };
         return db.search(opts);
       }).then(function (res) {
@@ -361,6 +361,41 @@ function tests(dbName, dbType) {
           {text: "This text is about <em>Yoshi</em>, but it's " +
             "much longer, so it shouldn't be weighted so much."}
         ]);
+      });
+    });
+    it('supports include_docs', function () {
+      return db.bulkDocs({docs: docs3}).then(function () {
+        var opts = {
+          fields: {'text': 1, 'title': 1},
+          q: 'yoshi',
+          include_docs: true
+        };
+        return db.search(opts);
+      }).then(function (res) {
+        var ids = res.rows.map(function (x) { return x.id; });
+        ids.should.deep.equal(['1', '2'], 'got incorrect docs: ' + JSON.stringify(res));
+        var docs = res.rows.map(function (x) {
+          return {
+            _id: x.doc._id,
+            text: x.doc.text,
+            title: x.doc.title
+          };
+        });
+        docs.should.deep.equal(docs3.slice(0, 2));
+      });
+    });
+    it("doesn't highlight or include docs by default", function () {
+      return db.bulkDocs({docs: docs3}).then(function () {
+        var opts = {
+          fields: {'text': 1, 'title': 1},
+          q: 'yoshi'
+        };
+        return db.search(opts);
+      }).then(function (res) {
+        var ids = res.rows.map(function (x) { return x.id; });
+        ids.should.deep.equal(['1', '2'], 'got incorrect docs: ' + JSON.stringify(res));
+        should.not.exist(ids[0].doc);
+        should.not.exist(ids[0].highlighting);
       });
     });
   });
