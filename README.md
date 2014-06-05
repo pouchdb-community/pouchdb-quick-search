@@ -8,6 +8,7 @@ PouchDB Quick Search
 ```js
 var pouch = new PouchDB('mydb');
 var doc = {_id: 'mydoc', title: "Guess who?", text: "It's-a me, Mario!"};
+
 pouch.put(doc).then(function () {
   return pouch.search({
     query: 'mario',
@@ -156,7 +157,7 @@ pouch.search({
 
 ### Highlighting
 
-A very handy feature is that you can use `{highlighting: true}` to return the fields that were matched against highlighted as keywords in context:
+A very handy option is `{highlighting: true}`, which returns the fields that were matched against, with the keywords highlighted in context:
 
 ```js
 pouch.search({
@@ -285,7 +286,7 @@ Docs must contain at least one of the three terms `'donkey'`, `'kong'`, and `'co
 
 ```js
 pouch.search({
-  query: 'donkey kong',
+  query: 'donkey kong country',
   fields: ['title', 'text'],
   mm: '33%'
 });
