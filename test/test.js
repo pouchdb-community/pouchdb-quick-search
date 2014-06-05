@@ -48,7 +48,7 @@ function tests(dbName, dbType) {
     return Pouch.destroy(dbName);
   });
   describe(dbType + ': search test suite', function () {
-    this.timeout(20000);
+    this.timeout(30000);
     
     it('basic search', function () {
       return db.bulkDocs({docs: docs}).then(function () {
@@ -402,7 +402,7 @@ function tests(dbName, dbType) {
         should.not.exist(ids[0].highlighting);
       });
     });
-    it('allows can highlight and include docs at the same time', function () {
+    it('can highlight and include docs at the same time', function () {
       return db.bulkDocs({docs: docs3}).then(function () {
         var opts = {
           fields: {'text': 1, 'title': 1},
@@ -453,14 +453,14 @@ function tests(dbName, dbType) {
         var opts = {
           fields: ['text', 'title'],
           query: 'yoshi',
-          skip: 95
+          skip: 15
         };
         return db.search(opts);
       }).then(function (res) {
         res.rows.should.have.length(5);
         uniq(res.rows.map(function (x) { return x.score; })).should.have.length(5);
         var ids = res.rows.map(function (x) { return x.id; });
-        ids.should.deep.equal(['yoshi_95', 'yoshi_96', 'yoshi_97', 'yoshi_98', 'yoshi_99']);
+        ids.should.deep.equal(['yoshi_15', 'yoshi_16', 'yoshi_17', 'yoshi_18', 'yoshi_19']);
       });
     });
 
@@ -469,7 +469,7 @@ function tests(dbName, dbType) {
         var opts = {
           fields: ['text', 'title'],
           query: 'yoshi',
-          skip: 50,
+          skip: 10,
           limit: 5
         };
         return db.search(opts);
@@ -477,7 +477,7 @@ function tests(dbName, dbType) {
         res.rows.should.have.length(5);
         uniq(res.rows.map(function (x) { return x.score; })).should.have.length(5);
         var ids = res.rows.map(function (x) { return x.id; });
-        ids.should.deep.equal(['yoshi_50', 'yoshi_51', 'yoshi_52', 'yoshi_53', 'yoshi_54']);
+        ids.should.deep.equal(['yoshi_10', 'yoshi_11', 'yoshi_12', 'yoshi_13', 'yoshi_14']);
       });
     });
   });
