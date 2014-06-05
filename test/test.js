@@ -271,6 +271,7 @@ function tests(dbName, dbType) {
         var ids = res.rows.map(function (x) { return x.id; });
         ids.should.deep.equal(['1'], 'got incorrect docs: ' + JSON.stringify(res));
         opts.destroy = true;
+        delete opts.query;
         return db.search(opts);
       }).then(function () {
         opts.stale = 'ok';
