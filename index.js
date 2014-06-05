@@ -26,7 +26,6 @@ exports.search = utils.toPromise(function (opts, callback) {
   var fields = opts.fields;
   var highlighting = opts.highlighting;
   var includeDocs = opts.include_docs;
-  var persistedIndexName = 'search-' + utils.MD5(JSON.stringify(fields));
   var destroy = opts.destroy;
   var stale = opts.stale;
   var limit = opts.limit;
@@ -42,6 +41,8 @@ exports.search = utils.toPromise(function (opts, callback) {
       return {field: field, boost: fields[field]};
     });
   }
+  var persistedIndexName = 'search-' + utils.MD5(JSON.stringify(
+      fieldBoosts.map(function (x) { return x.field; })));
 
   var mapFun = function (doc, emit) {
     var docInfo = [];
