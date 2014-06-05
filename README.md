@@ -341,7 +341,7 @@ pouch.search({
 });
 ```
 
-When you do this, you _must_ at least provide the `fields`, because external databases are created and identified based on the fields you want to index.  (I.e. for every unique `fields` combination you want to index, a separate database will be created especially for that query.)
+When you do this, you _must_ at least provide the `fields`, because external databases are created and identified based on the fields you want to index.  I.e. for every unique `fields` combination you want to index, a separate database will be created especially for that query. If you open up your developer tools, you can see it; it should have a name like `<mydbname>-search-<md5sum>` and look like this:
 
 
 Algorithm
