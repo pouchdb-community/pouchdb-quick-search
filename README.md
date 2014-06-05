@@ -28,12 +28,7 @@ This is a local plugin, so it is not designed to work against CouchDB/Cloudant/e
 
 If you need prefix search (e.g. for autocompletion), then just use PouchDB itself.  The `allDocs()`/`query()` APIs plus `startkey` should give you everything you need for prefix lookup.
 
-The underlying tokenization/stemming/stopword engine is [Lunr][]. If you'd like to see support for other languages, please file the issue in that repo.
-
-Building
-----
-    npm install
-    npm run build
+The underlying tokenization/stemming/stopword engine is [Lunr][]. If you'd like to see support for other languages than English, please file an issue in that repo.
 
 Usage
 --------
@@ -358,6 +353,11 @@ This plugin uses the classic search technique of [TF-IDF](https://en.wikipedia.o
 Additionally, it applies a per-field weighting based on the [DisMax](http://searchhub.org//2010/05/23/whats-a-dismax/) algorithm as used in [Apache Solr](https://lucene.apache.org/solr/), which means that short fields tend to be boosted relative to long fields.  This is useful for things like e.g. web page titles and web page contents, where the words in the titles are usually more significant than words in the contents.  For multi-word queries, this algorithm also has the nice effect of preferring documents that match both words, even across several fields.
 
 For more information about the algorithms that guided this implementation, refer to the [Lucene Similarity documentation](https://lucene.apache.org/core/3_6_0/api/core/org/apache/lucene/search/Similarity.html).
+
+Building
+----
+    npm install
+    npm run build
 
 Testing
 ----
