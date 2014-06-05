@@ -48,7 +48,7 @@ function tests(dbName, dbType) {
     return Pouch.destroy(dbName);
   });
   describe(dbType + ': search test suite', function () {
-    this.timeout(10000);
+    this.timeout(20000);
     
     it('basic search', function () {
       return db.bulkDocs({docs: docs}).then(function () {
