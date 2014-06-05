@@ -64,26 +64,26 @@ exports.search = utils.toPromise(function (opts, callback) {
     emit(TYPE_DOC_INFO + doc._id, docInfo);
   };
 
+  var queryOpts = {
+    saveAs: persistedIndexName
+  };
+  if (destroy) {
+    queryOpts.destroy = true;
+    return pouch.query(mapFun, queryOpts, callback);
+  }
+
   // usually it doesn't matter if the user types the same
   // token more than once, in fact I think even Lucene does this
   var queryTerms = uniq(getTokenStream(q));
   if (!queryTerms.length) {
     return callback(null, {rows: []});
   }
-  var keys = queryTerms.map(function (queryTerm) {
+  queryOpts.keys = queryTerms.map(function (queryTerm) {
     return TYPE_TOKEN_COUNT + queryTerm;
   });
-  var queryOpts = {
-    saveAs: persistedIndexName,
-    keys: keys
-  };
+
   if (typeof stale === 'string') {
     queryOpts.stale = stale;
-  }
-
-  if (destroy) {
-    queryOpts.destroy = true;
-    return pouch.query(mapFun, queryOpts, callback);
   }
 
   // search algorithm, basically classic TF-IDF

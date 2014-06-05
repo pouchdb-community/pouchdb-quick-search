@@ -276,6 +276,7 @@ function tests(dbName, dbType) {
       }).then(function () {
         opts.stale = 'ok';
         opts.destroy = false;
+        opts.query = 'mario';
         return db.search(opts);
       }).then(function (res) {
         res.rows.should.have.length(0, 'expect no search results for stale=ok');
