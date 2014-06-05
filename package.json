@@ -38,6 +38,7 @@
     "lie": "^2.6.0",
     "lunr": "0.5.3",
     "md5-jkmyers": "0.0.1",
+    "pouchdb-extend": "^0.1.0",
     "uniq": "^1.0.1"
   },
   "devDependencies": {
@@ -67,8 +68,5 @@
     "transform": [
       "es3ify"
     ]
-  },
-  "browser": {
-    "crypto": false
   }
 }

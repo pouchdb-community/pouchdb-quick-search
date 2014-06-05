@@ -259,5 +259,26 @@ function tests(dbName, dbType) {
         ids.should.deep.equal(['1'], 'got incorrect docs: ' + JSON.stringify(res));
       });
     });
+
+    it('should be able to delete', function () {
+      var opts = {
+        fields: ['text'],
+        q: 'mario'
+      };
+      return db.bulkDocs({docs: docs3}).then(function () {
+        return db.search(opts);
+      }).then(function (res) {
+        var ids = res.rows.map(function (x) { return x.id; });
+        ids.should.deep.equal(['1'], 'got incorrect docs: ' + JSON.stringify(res));
+        opts.destroy = true;
+        return db.search(opts);
+      }).then(function () {
+        opts.stale = 'ok';
+        opts.destroy = false;
+        return db.search(opts);
+      }).then(function (res) {
+        res.rows.should.have.length(0, 'expect no search results for stale=ok');
+      });
+    });
   });
 }

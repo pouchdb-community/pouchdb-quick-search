@@ -74,10 +74,13 @@ function calculateCosineSim(queryTerms, termDFs, docIdsToFieldsToQueryTerms,
 
 exports.search = utils.toPromise(function (opts, callback) {
   var pouch = this;
+  opts = utils.extend(true, {}, opts);
   var q = opts.q;
   var mm = 'mm' in opts ? (parseFloat(opts.mm) / 100) : 1; // e.g. '75%'
   var fields = opts.fields;
   var persistedIndexName = 'search-' + utils.MD5(JSON.stringify(fields));
+  var destroy = opts.destroy;
+  var stale = opts.stale;
 
   var mapFun = function (doc, emit) {
     var docInfo = [];
@@ -112,6 +115,14 @@ exports.search = utils.toPromise(function (opts, callback) {
     saveAs: persistedIndexName,
     keys: keys
   };
+  if (typeof stale === 'string') {
+    queryOpts.stale = stale;
+  }
+
+  if (destroy) {
+    queryOpts.destroy = true;
+    return pouch.query(mapFun, queryOpts, callback);
+  }
 
   // search algorithm, basically classic TF-IDF
   //
@@ -127,7 +138,6 @@ exports.search = utils.toPromise(function (opts, callback) {
   // More info:
   // https://lucene.apache.org/core/3_6_0/api/core/org/apache/lucene/search/Similarity.html
   //
-
 
   // step 1
   pouch.query(mapFun, queryOpts).then(function (res) {
