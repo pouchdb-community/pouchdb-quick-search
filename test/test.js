@@ -291,5 +291,33 @@ function tests(dbName, dbType) {
         res.rows.should.have.length(0);
       });
     });
+
+    it('allows you to weight fields', function () {
+      return db.bulkDocs({docs: docs3}).then(function () {
+        var opts = {
+          fields: {'text': 10, 'title': 1},
+          q: 'mario'
+        };
+        return db.search(opts);
+      }).then(function (res) {
+        var ids = res.rows.map(function (x) { return x.id; });
+        ids.should.deep.equal(['1', '2'], 'got incorrect docs: ' + JSON.stringify(res));
+        res.rows[0].score.should.not.equal(res.rows[1].score);
+      });
+    });
+
+    it('allows you to weight fields part 2', function () {
+      return db.bulkDocs({docs: docs3}).then(function () {
+        var opts = {
+          fields: {'text': 10, 'title': 1},
+          q: 'yoshi'
+        };
+        return db.search(opts);
+      }).then(function (res) {
+        var ids = res.rows.map(function (x) { return x.id; });
+        ids.should.deep.equal(['2', '1'], 'got incorrect docs: ' + JSON.stringify(res));
+        res.rows[0].score.should.not.equal(res.rows[1].score);
+      });
+    });
   });
 }

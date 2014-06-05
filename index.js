@@ -18,7 +18,7 @@ function getTokenStream(text) {
 }
 
 function calculateCosineSim(queryTerms, termDFs, docIdsToFieldsToQueryTerms,
-                            docIdsToFieldsToNorms) {
+                            docIdsToFieldsToNorms, fieldBoosts) {
   // calculate cosine similarity using tf-idf, which is equal to
   // dot-product(q, d) / (norm(q) * norm(doc))
   // although there is no point in calculating the query norm,
@@ -48,7 +48,8 @@ function calculateCosineSim(queryTerms, termDFs, docIdsToFieldsToQueryTerms,
         var termTF = queryTermsToCounts[queryTerm];
         var docScore = termTF / termDF; // TF-IDF for doc
         var queryScore = 1 / termDF; // TF-IDF for query, count assumed to be 1
-        return docScore * queryScore / fieldNorm;
+        var boost = fieldBoosts[fieldIdx].boost;
+        return docScore * queryScore * boost / fieldNorm;
       }).reduce(add, 0);
     });
 
@@ -82,17 +83,28 @@ exports.search = utils.toPromise(function (opts, callback) {
   var destroy = opts.destroy;
   var stale = opts.stale;
 
+  var fieldBoosts;
+  if (Array.isArray(fields)) {
+    fieldBoosts = fields.map(function (field) {
+      return {field: field, boost: 1};
+    });
+  } else { // object
+    fieldBoosts = Object.keys(fields).map(function (field) {
+      return {field: field, boost: fields[field]};
+    });
+  }
+
   var mapFun = function (doc, emit) {
     var docInfo = [];
-    fields.forEach(function (field, fieldIdx) {
-      var text = doc[field];
+    fieldBoosts.forEach(function (fieldBoost, fieldIdx) {
+      var text = doc[fieldBoost.field];
       var fieldLenNorm;
       if (text) {
         var terms = getTokenStream(text);
         terms.forEach(function (term) {
           // avoid emitting the value if there's only one field;
           // it takes up unnecessary space on disk
-          var value = fields.length > 1 ? fieldIdx : undefined;
+          var value = fieldBoosts.length > 1 ? fieldIdx : undefined;
           emit(TYPE_TOKEN_COUNT + term, value);
         });
         fieldLenNorm = Math.sqrt(terms.length);
@@ -166,7 +178,7 @@ exports.search = utils.toPromise(function (opts, callback) {
       // calculate docIdsToFieldsToQueryTerms
       if (!(row.id in docIdsToFieldsToQueryTerms)) {
         var arr = docIdsToFieldsToQueryTerms[row.id] = [];
-        for (var i = 0; i < fields.length; i++) {
+        for (var i = 0; i < fieldBoosts.length; i++) {
           arr[i] = {};
         }
       }
@@ -220,7 +232,7 @@ exports.search = utils.toPromise(function (opts, callback) {
       // step 3
       // now we have all information, so calculate cosine similarity
       var rows = calculateCosineSim(queryTerms, termDFs,
-        docIdsToFieldsToQueryTerms, docIdsToFieldsToNorms);
+        docIdsToFieldsToQueryTerms, docIdsToFieldsToNorms, fieldBoosts);
       callback(null, {rows: rows});
     });
   }).catch(callback);
