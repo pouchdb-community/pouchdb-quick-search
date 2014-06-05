@@ -108,6 +108,9 @@ exports.search = utils.toPromise(function (opts, callback) {
   // usually it doesn't matter if the user types the same
   // token more than once, in fact I think even Lucene does this
   var queryTerms = uniq(getTokenStream(q));
+  if (!queryTerms.length) {
+    return callback(null, {rows: []});
+  }
   var keys = queryTerms.map(function (queryTerm) {
     return TYPE_TOKEN_COUNT + queryTerm;
   });

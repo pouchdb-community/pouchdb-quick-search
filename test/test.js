@@ -278,6 +278,17 @@ function tests(dbName, dbType) {
         return db.search(opts);
       }).then(function (res) {
         res.rows.should.have.length(0, 'expect no search results for stale=ok');
+    });
+
+    it('should work with pure stopwords', function () {
+      return db.bulkDocs({docs: docs3}).then(function () {
+        var opts = {
+          fields: ['text'],
+          q: 'to be or not to be'
+        };
+        return db.search(opts);
+      }).then(function (res) {
+        res.rows.should.have.length(0);
       });
     });
   });
