@@ -3,6 +3,7 @@
 var utils = require('./pouch-utils');
 var lunr = require('lunr');
 var uniq = require('uniq');
+var Promise = utils.Promise;
 
 var index = lunr();
 
@@ -17,68 +18,13 @@ function getTokenStream(text) {
   return index.pipeline.run(lunr.tokenizer(text));
 }
 
-function calculateCosineSim(queryTerms, termDFs, docIdsToFieldsToQueryTerms,
-                            docIdsToFieldsToNorms, fieldBoosts) {
-  // calculate cosine similarity using tf-idf, which is equal to
-  // dot-product(q, d) / (norm(q) * norm(doc))
-  // although there is no point in calculating the query norm,
-  // because all we care about is the relative score for a given query,
-  // so we ignore it (lucene does this too)
-  //
-  // then we return a sorted list of results, like:
-  // [{id: {...}, score: 0.2}, {id: {...}, score: 0.1}];
-  //
-  // we also implement the dismax algorithm here, so the doc score is the
-  // sum of its fields' scores, and this is done on a per-query-term basis,
-  // then the maximum score for each of the query terms is the one chosen
-  //
-
-  var results = Object.keys(docIdsToFieldsToQueryTerms).map(function (docId) {
-
-    var fieldsToQueryTerms = docIdsToFieldsToQueryTerms[docId];
-    var fieldsToNorms = docIdsToFieldsToNorms[docId];
-
-    var queryScores = queryTerms.map(function (queryTerm) {
-      return fieldsToQueryTerms.map(function (queryTermsToCounts, fieldIdx) {
-        var fieldNorm = fieldsToNorms[fieldIdx];
-        if (!(queryTerm in queryTermsToCounts)) {
-          return 0;
-        }
-        var termDF = termDFs[queryTerm];
-        var termTF = queryTermsToCounts[queryTerm];
-        var docScore = termTF / termDF; // TF-IDF for doc
-        var queryScore = 1 / termDF; // TF-IDF for query, count assumed to be 1
-        var boost = fieldBoosts[fieldIdx].boost;
-        return docScore * queryScore * boost / fieldNorm;
-      }).reduce(add, 0);
-    });
-
-    var maxQueryScore = 0;
-    queryScores.forEach(function (queryScore) {
-      if (queryScore > maxQueryScore) {
-        maxQueryScore = queryScore;
-      }
-    });
-
-    return {
-      id: docId,
-      score: maxQueryScore
-    };
-  });
-
-  results.sort(function (a, b) {
-    return a.score < b.score ? 1 : (a.score > b.score ? -1 : 0);
-  });
-
-  return results;
-}
-
 exports.search = utils.toPromise(function (opts, callback) {
   var pouch = this;
   opts = utils.extend(true, {}, opts);
   var q = opts.q;
   var mm = 'mm' in opts ? (parseFloat(opts.mm) / 100) : 1; // e.g. '75%'
   var fields = opts.fields;
+  var highlighting = opts.highlighting;
   var persistedIndexName = 'search-' + utils.MD5(JSON.stringify(fields));
   var destroy = opts.destroy;
   var stale = opts.stale;
@@ -233,10 +179,105 @@ exports.search = utils.toPromise(function (opts, callback) {
       // now we have all information, so calculate cosine similarity
       var rows = calculateCosineSim(queryTerms, termDFs,
         docIdsToFieldsToQueryTerms, docIdsToFieldsToNorms, fieldBoosts);
-      callback(null, {rows: rows});
+      var result = {rows: rows};
+
+      if (highlighting) {
+        applyHighlighting(pouch, opts, rows, fieldBoosts,
+            docIdsToFieldsToQueryTerms, callback);
+        return;
+      }
+      callback(null, result);
     });
   }).catch(callback);
 });
+
+
+function calculateCosineSim(queryTerms, termDFs, docIdsToFieldsToQueryTerms,
+                            docIdsToFieldsToNorms, fieldBoosts) {
+  // calculate cosine similarity using tf-idf, which is equal to
+  // dot-product(q, d) / (norm(q) * norm(doc))
+  // although there is no point in calculating the query norm,
+  // because all we care about is the relative score for a given query,
+  // so we ignore it (lucene does this too)
+  //
+  // then we return a sorted list of results, like:
+  // [{id: {...}, score: 0.2}, {id: {...}, score: 0.1}];
+  //
+  // we also implement the dismax algorithm here, so the doc score is the
+  // sum of its fields' scores, and this is done on a per-query-term basis,
+  // then the maximum score for each of the query terms is the one chosen
+  //
+
+  var results = Object.keys(docIdsToFieldsToQueryTerms).map(function (docId) {
+
+    var fieldsToQueryTerms = docIdsToFieldsToQueryTerms[docId];
+    var fieldsToNorms = docIdsToFieldsToNorms[docId];
+
+    var queryScores = queryTerms.map(function (queryTerm) {
+      return fieldsToQueryTerms.map(function (queryTermsToCounts, fieldIdx) {
+        var fieldNorm = fieldsToNorms[fieldIdx];
+        if (!(queryTerm in queryTermsToCounts)) {
+          return 0;
+        }
+        var termDF = termDFs[queryTerm];
+        var termTF = queryTermsToCounts[queryTerm];
+        var docScore = termTF / termDF; // TF-IDF for doc
+        var queryScore = 1 / termDF; // TF-IDF for query, count assumed to be 1
+        var boost = fieldBoosts[fieldIdx].boost;
+        return docScore * queryScore * boost / fieldNorm;
+      }).reduce(add, 0);
+    });
+
+    var maxQueryScore = 0;
+    queryScores.forEach(function (queryScore) {
+      if (queryScore > maxQueryScore) {
+        maxQueryScore = queryScore;
+      }
+    });
+
+    return {
+      id: docId,
+      score: maxQueryScore
+    };
+  });
+
+  results.sort(function (a, b) {
+    return a.score < b.score ? 1 : (a.score > b.score ? -1 : 0);
+  });
+
+  return results;
+}
+
+// create a convenient object showing highlighting results
+// this is designed to be like solr's highlighting feature, so it
+// should return something like
+// {'fieldname': 'here is some <strong>highlighted text</strong>.'}
+//
+function applyHighlighting(pouch, opts, rows, fieldBoosts,
+                           docIdsToFieldsToQueryTerms, callback) {
+  var pre = opts.highlightingBefore || '<strong>';
+  var post = opts.highlightingAfter || '</strong>';
+
+  Promise.all(rows.map(function (row) {
+    return pouch.get(row.id).then(function (doc) {
+      row.highlighting = {};
+      docIdsToFieldsToQueryTerms[row.id].forEach(function (queryTerms, i) {
+        var fieldName = fieldBoosts[i].field;
+        var text = doc[fieldName];
+        // TODO: this is fairly naive highlighting code; could improve
+        // the regex
+        Object.keys(queryTerms).forEach(function (queryTerm) {
+          var regex = new RegExp('(' + queryTerm + '[a-z]*)', 'gi');
+          var replacement = pre + '$1' + post;
+          text = text.replace(regex, replacement);
+          row.highlighting[fieldName] = text;
+        });
+      });
+    });
+  })).then(function () {
+    callback(null, {rows: rows});
+  }).catch(callback);
+}
 
 /* istanbul ignore next */
 if (typeof window !== 'undefined' && window.PouchDB) {

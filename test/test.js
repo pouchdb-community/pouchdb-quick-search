@@ -278,6 +278,7 @@ function tests(dbName, dbType) {
         return db.search(opts);
       }).then(function (res) {
         res.rows.should.have.length(0, 'expect no search results for stale=ok');
+      });
     });
 
     it('should work with pure stopwords', function () {
@@ -317,6 +318,49 @@ function tests(dbName, dbType) {
         var ids = res.rows.map(function (x) { return x.id; });
         ids.should.deep.equal(['2', '1'], 'got incorrect docs: ' + JSON.stringify(res));
         res.rows[0].score.should.not.equal(res.rows[1].score);
+      });
+    });
+
+    it('allows you to highlight', function () {
+      return db.bulkDocs({docs: docs3}).then(function () {
+        var opts = {
+          fields: {'text': 1, 'title': 1},
+          q: 'yoshi',
+          highlighting: true
+        };
+        return db.search(opts);
+      }).then(function (res) {
+        var ids = res.rows.map(function (x) { return x.id; });
+        ids.should.deep.equal(['1', '2'], 'got incorrect docs: ' + JSON.stringify(res));
+        res.rows[0].score.should.not.equal(res.rows[1].score);
+        var hls = res.rows.map(function (x) { return x.highlighting; });
+        hls.should.deep.equal([
+          {title: 'This title is about <strong>Yoshi</strong>'},
+          {text: "This text is about <strong>Yoshi</strong>, but it's " +
+            "much longer, so it shouldn't be weighted so much."}
+        ]);
+      });
+    });
+    it('allows you to highlight with custom tags', function () {
+      return db.bulkDocs({docs: docs3}).then(function () {
+        var opts = {
+          fields: {'text': 1, 'title': 1},
+          q: 'yoshi',
+          highlighting: true,
+          highlightingBefore: '<em>',
+          highlightingAfter: '</em>'
+        };
+        return db.search(opts);
+      }).then(function (res) {
+        var ids = res.rows.map(function (x) { return x.id; });
+        ids.should.deep.equal(['1', '2'], 'got incorrect docs: ' + JSON.stringify(res));
+        res.rows[0].score.should.not.equal(res.rows[1].score);
+        var hls = res.rows.map(function (x) { return x.highlighting; });
+        hls.should.deep.equal([
+          {title: 'This title is about <em>Yoshi</em>'},
+          {text: "This text is about <em>Yoshi</em>, but it's " +
+            "much longer, so it shouldn't be weighted so much."}
+        ]);
       });
     });
   });
