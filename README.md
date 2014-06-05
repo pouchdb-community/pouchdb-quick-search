@@ -241,6 +241,24 @@ pouch.search({
 }
 ```
 
+### Pagination
+
+You can use `limit` and `skip`, just like with the `allDocs()`/`query()` API:
+
+```js
+pouch.search({
+  query: 'kong',
+  fields: ['title', 'text'],
+  limit: 10,
+  skip: 20
+});
+```
+
+The performance concerns for `skip` that apply to `allDocs()`/`query()` do not apply so much here, because no matter what, we have to read in all the doc IDs and calculate their score in order to sort them correctly. In other words, it is guaranteed that you will read the doc IDs of all matching documents into memory at once, no matter what values you set for `limit` and `skip`.
+
+What this will optimize, however, is the attachment of metadata like `doc` and `highlighting` &ndash; it will only be done for the subset of results that you want.
+
+
 ### Boosting fields
 
 Fields may be boosted:
@@ -251,9 +269,7 @@ pouch.search({
   fields: {
     'title': 1,
     'text': 5
-    
   }
-  limit: 2
 });
 ```
 

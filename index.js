@@ -29,6 +29,8 @@ exports.search = utils.toPromise(function (opts, callback) {
   var persistedIndexName = 'search-' + utils.MD5(JSON.stringify(fields));
   var destroy = opts.destroy;
   var stale = opts.stale;
+  var limit = opts.limit;
+  var skip = opts.skip || 0;
 
   var fieldBoosts;
   if (Array.isArray(fields)) {
@@ -181,6 +183,11 @@ exports.search = utils.toPromise(function (opts, callback) {
       var rows = calculateCosineSim(queryTerms, termDFs,
         docIdsToFieldsToQueryTerms, docIdsToFieldsToNorms, fieldBoosts);
       return rows;
+    }).then(function (rows) {
+      // filter before fetching docs or applying highlighting
+      // for a slight optimization, since for now we've only fetched ids/scores
+      return (typeof limit === 'number' && limit >= 0) ?
+          rows.slice(skip, skip + limit) : skip > 0 ? rows.slice(skip) : rows;
     }).then(function (rows) {
       if (includeDocs) {
         return applyIncludeDocs(pouch, rows);

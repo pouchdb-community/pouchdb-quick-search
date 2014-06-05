@@ -2,6 +2,7 @@
 'use strict';
 
 var Pouch = require('pouchdb');
+var uniq = require('uniq');
 
 //
 // your plugin goes here
@@ -33,6 +34,7 @@ dbs.split(',').forEach(function (db) {
 var docs = require('./docs/test-docs');
 var docs2 = require('./docs/test-docs-2');
 var docs3 = require('./docs/test-docs-3');
+var docs4 = require('./docs/test-docs-4');
 
 function tests(dbName, dbType) {
 
@@ -427,6 +429,55 @@ function tests(dbName, dbType) {
           };
         });
         docs.should.deep.equal(docs3.slice(0, 2));
+      });
+    });
+
+    it('supports limit', function () {
+      return db.bulkDocs({docs: docs4}).then(function () {
+        var opts = {
+          fields: ['text', 'title'],
+          query: 'yoshi',
+          limit: 5
+        };
+        return db.search(opts);
+      }).then(function (res) {
+        res.rows.should.have.length(5);
+        uniq(res.rows.map(function (x) { return x.score; })).should.have.length(5);
+        var ids = res.rows.map(function (x) { return x.id; });
+        ids.should.deep.equal(['yoshi_0', 'yoshi_1', 'yoshi_2', 'yoshi_3', 'yoshi_4']);
+      });
+    });
+
+    it('supports skip', function () {
+      return db.bulkDocs({docs: docs4}).then(function () {
+        var opts = {
+          fields: ['text', 'title'],
+          query: 'yoshi',
+          skip: 95
+        };
+        return db.search(opts);
+      }).then(function (res) {
+        res.rows.should.have.length(5);
+        uniq(res.rows.map(function (x) { return x.score; })).should.have.length(5);
+        var ids = res.rows.map(function (x) { return x.id; });
+        ids.should.deep.equal(['yoshi_95', 'yoshi_96', 'yoshi_97', 'yoshi_98', 'yoshi_99']);
+      });
+    });
+
+    it('supports limit and skip', function () {
+      return db.bulkDocs({docs: docs4}).then(function () {
+        var opts = {
+          fields: ['text', 'title'],
+          query: 'yoshi',
+          skip: 50,
+          limit: 5
+        };
+        return db.search(opts);
+      }).then(function (res) {
+        res.rows.should.have.length(5);
+        uniq(res.rows.map(function (x) { return x.score; })).should.have.length(5);
+        var ids = res.rows.map(function (x) { return x.id; });
+        ids.should.deep.equal(['yoshi_50', 'yoshi_51', 'yoshi_52', 'yoshi_53', 'yoshi_54']);
       });
     });
   });
