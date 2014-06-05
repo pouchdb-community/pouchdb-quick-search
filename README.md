@@ -37,20 +37,26 @@ To use this plugin, include it after `pouchdb.js` in your HTML page:
 
 ```html
 <script src="pouchdb.js"></script>
-<script src="pouchdb.search.js"></script>
+<script src="pouchdb.quick-search.js"></script>
+```
+
+This plugin is also available from Bower:
+
+```
+bower install pouchdb-quick-search
 ```
 
 Or to use it in Node.js, just npm install it:
 
 ```
-npm install pouchdb-search
+npm install pouchdb-quick-search
 ```
 
 And then attach it to the `PouchDB` object:
 
 ```js
 var PouchDB = require('pouchdb');
-PouchDB.plugin(require('pouchdb-search'));
+PouchDB.plugin(require('pouchdb-quick-search'));
 ```
 
 API

@@ -5,7 +5,7 @@
   "main": "index.js",
   "repository": {
     "type": "git",
-    "url": "git://github.com/nolanlawson/pouchdb-search-v2.git"
+    "url": "git://github.com/nolanlawson/pouchdb-quick-search.git"
   },
   "keywords": [
     "pouch",
@@ -18,15 +18,15 @@
   "author": "",
   "license": "Apache",
   "bugs": {
-    "url": "https://github.com/nolanlawson/pouchdb-search-v2/issues"
+    "url": "https://github.com/nolanlawson/pouchdb-quick-search/issues"
   },
   "scripts": {
     "test-node": "TEST_DB=testdb istanbul test ./node_modules/mocha/bin/_mocha test/test.js",
     "test-browser": "./bin/test-browser.js",
     "jshint": "jshint -c .jshintrc *.js test/test.js",
     "test": "npm run jshint && ./bin/run-test.sh",
-    "build": "mkdir -p dist && browserify index.js -o dist/pouchdb.search.js && npm run min",
-    "min": "uglifyjs dist/pouchdb.search.js -mc > dist/pouchdb.search.min.js",
+    "build": "mkdir -p dist && browserify index.js -o dist/pouchdb.quick-search.js && npm run min",
+    "min": "uglifyjs dist/pouchdb.quick-search.js -mc > dist/pouchdb.quick-search.min.js",
     "dev": "browserify test/test.js > test/test-bundle.js && npm run dev-server",
     "dev-server": "./bin/dev-server.js",
     "coverage": "npm test --coverage && istanbul check-coverage --lines 100 --function 100 --statements 100 --branches 100"
