@@ -398,5 +398,34 @@ function tests(dbName, dbType) {
         should.not.exist(ids[0].highlighting);
       });
     });
+    it('allows can highlight and include docs at the same time', function () {
+      return db.bulkDocs({docs: docs3}).then(function () {
+        var opts = {
+          fields: {'text': 1, 'title': 1},
+          query: 'yoshi',
+          highlighting: true,
+          include_docs: true
+        };
+        return db.search(opts);
+      }).then(function (res) {
+        var ids = res.rows.map(function (x) { return x.id; });
+        ids.should.deep.equal(['1', '2'], 'got incorrect docs: ' + JSON.stringify(res));
+        res.rows[0].score.should.not.equal(res.rows[1].score);
+        var hls = res.rows.map(function (x) { return x.highlighting; });
+        hls.should.deep.equal([
+          {title: 'This title is about <strong>Yoshi</strong>'},
+          {text: "This text is about <strong>Yoshi</strong>, but it's " +
+            "much longer, so it shouldn't be weighted so much."}
+        ]);
+        var docs = res.rows.map(function (x) {
+          return {
+            _id: x.doc._id,
+            text: x.doc.text,
+            title: x.doc.title
+          };
+        });
+        docs.should.deep.equal(docs3.slice(0, 2));
+      });
+    });
   });
 }

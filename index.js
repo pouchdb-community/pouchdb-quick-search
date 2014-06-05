@@ -182,15 +182,16 @@ exports.search = utils.toPromise(function (opts, callback) {
         docIdsToFieldsToQueryTerms, docIdsToFieldsToNorms, fieldBoosts);
       return rows;
     }).then(function (rows) {
-      if (highlighting) {
-        return applyHighlighting(pouch, opts, rows, fieldBoosts, docIdsToFieldsToQueryTerms);
-      }
-      return rows;
-    }).then(function (rows) {
       if (includeDocs) {
         return applyIncludeDocs(pouch, rows);
       }
       return rows;
+    }).then(function (rows) {
+      if (highlighting) {
+        return applyHighlighting(pouch, opts, rows, fieldBoosts, docIdsToFieldsToQueryTerms);
+      }
+      return rows;
+
     }).then(function (rows) {
       callback(null, {rows: rows});
     });
@@ -278,7 +279,13 @@ function applyHighlighting(pouch, opts, rows, fieldBoosts,
   var post = opts.highlighting_post || '</strong>';
 
   return Promise.all(rows.map(function (row) {
-    return pouch.get(row.id).then(function (doc) {
+
+    return Promise.resolve().then(function () {
+      if (row.doc) {
+        return row.doc;
+      }
+      return pouch.get(row.id);
+    }).then(function (doc) {
       row.highlighting = {};
       docIdsToFieldsToQueryTerms[row.id].forEach(function (queryTerms, i) {
         var fieldName = fieldBoosts[i].field;
