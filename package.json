@@ -50,7 +50,7 @@
     "jshint": "~2.3.0",
     "mocha": "~1.18",
     "phantomjs": "^1.9.7-5",
-    "pouchdb": "pouchdb/pouchdb",
+    "pouchdb": "nolanlawson/pouchdb#persistence-2",
     "request": "^2.36.0",
     "sauce-connect-launcher": "^0.4.2",
     "uglify-js": "^2.4.13",
