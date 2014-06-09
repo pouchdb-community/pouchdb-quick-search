@@ -104,6 +104,43 @@ pouch.search({
 });
 ```
 
+### Document structure
+
+Your document fields can be strings or arrays of strings.  Use `'.'`s for deeply nested fields.
+
+```js
+var doc = {
+  _id: 'mydoc3',
+  name: 'Princess Peach',
+  likes: ['cakes', 'go-karts', 'turnips'],
+  description: {
+    summary: 'Can float in Mario 2.'
+  } 
+};
+
+pouch.put(doc).then(function () {
+  return pouch.search({
+    query: 'peach',
+    fields: ['name', 'likes', 'description.summary']
+  });
+});
+```
+
+**Response:**
+
+```js
+{
+  "result" : { 
+    "rows": [ 
+      { 
+        "id": "mydoc", 
+        "score": 0.044194173824159216 
+      } 
+    ] 
+  }
+}
+```
+
 ### Fetching the full documents
 
 By default, you only get back the matching document `id`s and `score`s. You can also use `{include_docs: true}` to get back the full documents:

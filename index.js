@@ -22,6 +22,62 @@ function getTokenStream(text) {
   return index.pipeline.run(lunr.tokenizer(text));
 }
 
+// given an object containing the field name and/or
+// a deepField definition plus the doc, return the text for
+// indexing
+function getText(fieldBoost, doc) {
+  var text;
+  if (!fieldBoost.deepField) {
+    text = doc[fieldBoost.field];
+  } else { // "Enhance."
+    text = doc;
+    for (var i = 0, len = fieldBoost.deepField.length; i < len; i++) {
+      text = text && text[fieldBoost.deepField[i]];
+    }
+  }
+  if (text) {
+    if (Array.isArray(text)) {
+      text = text.join(' ');
+    } else if (typeof text !== 'string') {
+      text = text.toString();
+    }
+  }
+  return text;
+}
+
+// map function that gets passed to map/reduce
+// emits two types of key/values - one for each token
+// and one for the field-len-norm
+function createMapFunction(fieldBoosts) {
+  return function (doc, emit) {
+    var docInfo = [];
+
+    for (var i = 0, len = fieldBoosts.length; i < len; i++) {
+      var fieldBoost = fieldBoosts[i];
+
+      var text = getText(fieldBoost, doc);
+
+      var fieldLenNorm;
+      if (text) {
+        var terms = getTokenStream(text);
+        for (var j = 0, jLen = terms.length; j < jLen; j++) {
+          var term = terms[j];
+          // avoid emitting the value if there's only one field;
+          // it takes up unnecessary space on disk
+          var value = fieldBoosts.length > 1 ? i : undefined;
+          emit(TYPE_TOKEN_COUNT + term, value);
+        }
+        fieldLenNorm = Math.sqrt(terms.length);
+      } else { // no tokens
+        fieldLenNorm = 0;
+      }
+      docInfo.push(fieldLenNorm);
+    }
+
+    emit(TYPE_DOC_INFO + doc._id, docInfo);
+  };
+}
+
 exports.search = utils.toPromise(function (opts, callback) {
   var pouch = this;
   opts = utils.extend(true, {}, opts);
@@ -35,45 +91,29 @@ exports.search = utils.toPromise(function (opts, callback) {
   var limit = opts.limit;
   var skip = opts.skip || 0;
 
-  var fieldBoosts;
   if (Array.isArray(fields)) {
-    fieldBoosts = fields.map(function (field) {
-      return {field: field, boost: 1};
+    var fieldsMap = {};
+    fields.forEach(function (field) {
+      fieldsMap[field] = 1; // default boost
     });
-  } else { // object
-    fieldBoosts = Object.keys(fields).map(function (field) {
-      return {field: field, boost: fields[field]};
-    });
+    fields = fieldsMap;
   }
+
+  var fieldBoosts = Object.keys(fields).map(function (field) {
+    var deepField = field.indexOf('.') !== -1 && field.split('.');
+    return {
+      field: field,
+      deepField: deepField,
+      boost: fields[field]
+    };
+  });
 
   // the index we save as a separate database is uniquely identified
   // by the fields the user want to index (boost doesn't matter)
   var persistedIndexName = 'search-' + utils.MD5(JSON.stringify(
       fieldBoosts.map(function (x) { return x.field; }).sort()));
 
-  // map function that gets passed to map/reduce
-  var mapFun = function (doc, emit) {
-    var docInfo = [];
-    fieldBoosts.forEach(function (fieldBoost, fieldIdx) {
-      var text = doc[fieldBoost.field];
-      var fieldLenNorm;
-      if (text) {
-        var terms = getTokenStream(text);
-        terms.forEach(function (term) {
-          // avoid emitting the value if there's only one field;
-          // it takes up unnecessary space on disk
-          var value = fieldBoosts.length > 1 ? fieldIdx : undefined;
-          emit(TYPE_TOKEN_COUNT + term, value);
-        });
-        fieldLenNorm = Math.sqrt(terms.length);
-      } else {
-        fieldLenNorm = 0;
-      }
-      docInfo.push(fieldLenNorm);
-    });
-
-    emit(TYPE_DOC_INFO + doc._id, docInfo);
-  };
+  var mapFun = createMapFunction(fieldBoosts);
 
   var queryOpts = {
     saveAs: persistedIndexName
@@ -310,8 +350,9 @@ function applyHighlighting(pouch, opts, rows, fieldBoosts,
     }).then(function (doc) {
       row.highlighting = {};
       docIdsToFieldsToQueryTerms[row.id].forEach(function (queryTerms, i) {
-        var fieldName = fieldBoosts[i].field;
-        var text = doc[fieldName];
+        var fieldBoost = fieldBoosts[i];
+        var fieldName = fieldBoost.field;
+        var text = getText(fieldBoost, doc);
         // TODO: this is fairly naive highlighting code; could improve
         // the regex
         Object.keys(queryTerms).forEach(function (queryTerm) {

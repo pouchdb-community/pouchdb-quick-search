@@ -35,6 +35,7 @@ var docs = require('./docs/test-docs');
 var docs2 = require('./docs/test-docs-2');
 var docs3 = require('./docs/test-docs-3');
 var docs4 = require('./docs/test-docs-4');
+var docs5 = require('./docs/test-docs-5');
 
 function tests(dbName, dbType) {
 
@@ -521,6 +522,55 @@ function tests(dbName, dbType) {
         uniq(res.rows.map(function (x) { return x.score; })).should.have.length(5);
         var ids = res.rows.map(function (x) { return x.id; });
         ids.should.deep.equal(['yoshi_10', 'yoshi_11', 'yoshi_12', 'yoshi_13', 'yoshi_14']);
+      });
+    });
+
+    it('allows searching deep fields', function () {
+      return db.bulkDocs({docs: docs5}).then(function () {
+        var opts = {
+          fields: ['deep.structure.text'],
+          query: 'squirrels'
+        };
+        return db.search(opts);
+      }).then(function (res) {
+        var ids = res.rows.map(function (x) { return x.id; });
+        ids.should.deep.equal(['2']);
+      });
+    });
+    it('allows searching string arrays', function () {
+      return db.bulkDocs({docs: docs5}).then(function () {
+        var opts = {
+          fields: ['list'],
+          query: 'array'
+        };
+        return db.search(opts);
+      }).then(function (res) {
+        var ids = res.rows.map(function (x) { return x.id; });
+        ids.should.deep.equal(['1']);
+      });
+    });
+    it('does nothing when the field is invalid', function () {
+      return db.bulkDocs({docs: docs5}).then(function () {
+        var opts = {
+          fields: ['invalid'],
+          query: 'foo'
+        };
+        return db.search(opts);
+      }).then(function (res) {
+        var ids = res.rows.map(function (x) { return x.id; });
+        ids.should.deep.equal([]);
+      });
+    });
+    it('can use numbers as field values', function () {
+      return db.bulkDocs({docs: docs5}).then(function () {
+        var opts = {
+          fields: ['aNumber'],
+          query: '1'
+        };
+        return db.search(opts);
+      }).then(function (res) {
+        var ids = res.rows.map(function (x) { return x.id; });
+        ids.should.deep.equal(['3']);
       });
     });
   });
