@@ -285,6 +285,49 @@ function tests(dbName, dbType) {
       });
     });
 
+    it('gives zero results when stale', function () {
+      var opts = {
+        fields: ['text', 'title'],
+        query: 'mario',
+        stale: 'ok'
+      };
+      return db.bulkDocs({docs: docs3}).then(function () {
+        return db.search(opts);
+      }).then(function (res) {
+        res.rows.should.have.length(0, 'no results after stale=ok');
+        opts.stale = 'update_after';
+        return db.search(opts);
+      }).then(function (res) {
+        res.rows.length.should.be.within(0, 2, 'no results after stale=update_after');
+        delete opts.stale;
+        return db.search(opts);
+      }).then(function (res) {
+        res.rows.should.have.length(2, 'got results eventually');
+      });
+    });
+
+    it('uniquely IDs same fields with different order', function () {
+      var opts = {
+        fields: ['text', 'title'],
+        query: 'mario'
+      };
+      return db.bulkDocs({docs: docs3}).then(function () {
+        return db.search(opts);
+      }).then(function (res) {
+        var ids = res.rows.map(function (x) { return x.id; });
+        ids.should.deep.equal(['2', '1'], 'got incorrect docs: ' + JSON.stringify(res));
+        opts = {
+          fields: ['title', 'text'],
+          query: 'mario',
+          stale: 'ok'
+        };
+        return db.search(opts);
+      }).then(function (res) {
+        var ids = res.rows.map(function (x) { return x.id; });
+        ids.should.deep.equal(['2', '1'], 'got incorrect docs: ' + JSON.stringify(res));
+      });
+    });
+
     it('should work with pure stopwords', function () {
       return db.bulkDocs({docs: docs3}).then(function () {
         var opts = {

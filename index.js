@@ -14,6 +14,10 @@ function add(left, right) {
   return left + right;
 }
 
+// get all the tokens found in the given text (non-unique)
+// in the future, we might expand this to do more than just
+// English. Also, this is a private Lunr API, hence why
+// the Lunr version is pegged.
 function getTokenStream(text) {
   return index.pipeline.run(lunr.tokenizer(text));
 }
@@ -41,9 +45,13 @@ exports.search = utils.toPromise(function (opts, callback) {
       return {field: field, boost: fields[field]};
     });
   }
-  var persistedIndexName = 'search-' + utils.MD5(JSON.stringify(
-      fieldBoosts.map(function (x) { return x.field; })));
 
+  // the index we save as a separate database is uniquely identified
+  // by the fields the user want to index (boost doesn't matter)
+  var persistedIndexName = 'search-' + utils.MD5(JSON.stringify(
+      fieldBoosts.map(function (x) { return x.field; }).sort()));
+
+  // map function that gets passed to map/reduce
   var mapFun = function (doc, emit) {
     var docInfo = [];
     fieldBoosts.forEach(function (fieldBoost, fieldIdx) {
@@ -75,8 +83,9 @@ exports.search = utils.toPromise(function (opts, callback) {
     return pouch.query(mapFun, queryOpts, callback);
   }
 
-  // usually it doesn't matter if the user types the same
+  // it shouldn't matter if the user types the same
   // token more than once, in fact I think even Lucene does this
+  // special cases like boingo boingo and mother mother are rare
   var queryTerms = uniq(getTokenStream(q));
   if (!queryTerms.length) {
     return callback(null, {rows: []});
@@ -91,13 +100,13 @@ exports.search = utils.toPromise(function (opts, callback) {
 
   // search algorithm, basically classic TF-IDF
   //
-  // step 1: get the docs associated with the terms in the query
-  // step 2: get the doc-len-norms of those documents
-  // step 3: calculate cosine similarity using tf-idf
+  // step 1: get the doc+fields associated with the terms in the query
+  // step 2: get the doc-len-norms of those document fields
+  // step 3: calculate document scores using tf-idf
   //
   // note that we follow the Lucene convention (established in
-  // DefaultSimilarity.java) of computing doc-len-norm as
-  // Math.sqrt(numTerms)
+  // DefaultSimilarity.java) of computing doc-len-norm (in our case, tecnically
+  // field-lennorm) as Math.sqrt(numTerms),
   // which is an optimization that avoids having to look up every term
   // in that document and fully recompute its scores based on tf-idf
   // More info:
@@ -180,8 +189,8 @@ exports.search = utils.toPromise(function (opts, callback) {
         docIdsToFieldsToNorms[row.id] = row.value;
       });
       // step 3
-      // now we have all information, so calculate cosine similarity
-      var rows = calculateCosineSim(queryTerms, termDFs,
+      // now we have all information, so calculate scores
+      var rows = calculateDocumentScores(queryTerms, termDFs,
         docIdsToFieldsToQueryTerms, docIdsToFieldsToNorms, fieldBoosts);
       return rows;
     }).then(function (rows) {
@@ -207,21 +216,26 @@ exports.search = utils.toPromise(function (opts, callback) {
 });
 
 
-function calculateCosineSim(queryTerms, termDFs, docIdsToFieldsToQueryTerms,
+// returns a sorted list of scored results, like:
+// [{id: {...}, score: 0.2}, {id: {...}, score: 0.1}];
+//
+// some background: normally this would be implemented as cosine similarity
+// using tf-idf, which is equal to
+// dot-product(q, d) / (norm(q) * norm(doc))
+// (although there is no point in calculating the query norm,
+// because all we care about is the relative score for a given query,
+// so we ignore it, lucene does this too)
+//
+//
+// but instead of straightforward cosine similarity, here I implement
+// the dismax algorithm, so the doc score is the
+// sum of its fields' scores, and this is done on a per-query-term basis,
+// then the maximum score for each of the query terms is the one chosen,
+// i.e. max(sumOfQueryTermScoresForField1, sumOfQueryTermScoresForField2, etc.)
+//
+
+function calculateDocumentScores(queryTerms, termDFs, docIdsToFieldsToQueryTerms,
                             docIdsToFieldsToNorms, fieldBoosts) {
-  // calculate cosine similarity using tf-idf, which is equal to
-  // dot-product(q, d) / (norm(q) * norm(doc))
-  // although there is no point in calculating the query norm,
-  // because all we care about is the relative score for a given query,
-  // so we ignore it (lucene does this too)
-  //
-  // then we return a sorted list of results, like:
-  // [{id: {...}, score: 0.2}, {id: {...}, score: 0.1}];
-  //
-  // we also implement the dismax algorithm here, so the doc score is the
-  // sum of its fields' scores, and this is done on a per-query-term basis,
-  // then the maximum score for each of the query terms is the one chosen
-  //
 
   var results = Object.keys(docIdsToFieldsToQueryTerms).map(function (docId) {
 
@@ -239,7 +253,7 @@ function calculateCosineSim(queryTerms, termDFs, docIdsToFieldsToQueryTerms,
         var docScore = termTF / termDF; // TF-IDF for doc
         var queryScore = 1 / termDF; // TF-IDF for query, count assumed to be 1
         var boost = fieldBoosts[fieldIdx].boost;
-        return docScore * queryScore * boost / fieldNorm;
+        return docScore * queryScore * boost / fieldNorm; // see cosine sim equation
       }).reduce(add, 0);
     });
 
