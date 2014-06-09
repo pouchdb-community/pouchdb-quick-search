@@ -1,7 +1,7 @@
 {
-  "name": "pouchdb-search-v2",
+  "name": "pouchdb-quick-search",
   "version": "0.1.0",
-  "description": "PouchDB Search v2",
+  "description": "PouchDB Quick Search - persisted full-text search for PouchDB",
   "main": "index.js",
   "repository": {
     "type": "git",
