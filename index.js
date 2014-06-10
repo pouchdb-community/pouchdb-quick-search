@@ -89,6 +89,7 @@ exports.search = utils.toPromise(function (opts, callback) {
   var destroy = opts.destroy;
   var stale = opts.stale;
   var limit = opts.limit;
+  var build = opts.build;
   var skip = opts.skip || 0;
 
   if (Array.isArray(fields)) {
@@ -121,6 +122,13 @@ exports.search = utils.toPromise(function (opts, callback) {
   if (destroy) {
     queryOpts.destroy = true;
     return pouch.query(mapFun, queryOpts, callback);
+  } else if (build) {
+    delete queryOpts.stale; // update immediately
+    queryOpts.limit = 0;
+    pouch.query(mapFun, queryOpts).then(function () {
+      callback(null, {ok: true});
+    }).catch(callback);
+    return;
   }
 
   // it shouldn't matter if the user types the same

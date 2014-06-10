@@ -307,6 +307,24 @@ function tests(dbName, dbType) {
       });
     });
 
+    it('can explicitly build an index', function () {
+      var opts = {
+        fields: ['text', 'title'],
+        build: true
+      };
+      return db.bulkDocs({docs: docs3}).then(function () {
+        return db.search(opts);
+      }).then(function (info) {
+        info.should.deep.equal({ok: true});
+        delete opts.build;
+        opts.query = 'mario';
+        opts.stale = 'ok';
+        return db.search(opts);
+      }).then(function (res) {
+        res.rows.should.have.length(2, 'got results after building');
+      });
+    });
+
     it('uniquely IDs same fields with different order', function () {
       var opts = {
         fields: ['text', 'title'],

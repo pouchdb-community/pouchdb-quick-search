@@ -347,31 +347,26 @@ pouch.search({
 
 The default `mm` value is `100%`.  All values must be provided as a percentage (ints are okay).
 
-### Updating an index
+### Build an index
 
-When you search, a [persistent map/reduce index](http://pouchdb.com/api.html#query_database) is created behind the scenes, in order to save the indexed data and provide the fastest possible queries.
+If you only use the `search()` method as described above, then it will be slow the first time you query, because the index has to be built up.
 
-This means that the performance constraints that apply to the `query()` API also apply here.  In other words, the first time you query, it will be slow because it has to build up the index, but after the first time, it will be much faster.
-
-You can also use the `stale` option, as in the `query()` API, e.g.:
+To avoid slow performance, you can explicitly tell the search plugin to build up the index using `{build: true}`:
 
 ```js
 pouch.search({
-  query: 'donkey kong',
   fields: ['title', 'text'],
-  stale: 'update_after'
+  build: true
+}).then(function (info) {
+  // if build was successful, info is {"ok": true}
+}).then(function (err) {
+  // handle error
 });
 ```
 
-or
+This will build up the index without querying it. If the database has changed since you last updated (e.g. new documents were added), then it will simply update the index with the new documents. If nothing has changed, then it won't do anything.
 
-```js
-pouch.search({
-  query: 'donkey kong',
-  fields: ['title', 'text'],
-  stale: 'ok'
-});
-```
+You must at least provide the `fields` you want to index.  Boosts don't matter.
 
 ### Deleting an index
 
@@ -387,6 +382,34 @@ pouch.search({
 When you do this, you _must_ at least provide the `fields`, because external databases are created and identified based on the fields you want to index.  I.e. for every unique `fields` combination you want to index, a separate database will be created especially for that query. If you open up your developer tools, you can see it; it should have a name like `<mydbname>-search-<md5sum>` and look like this:
 
 ![extra database created for search](https://raw.githubusercontent.com/nolanlawson/pouchdb-quick-search/master/docs/extra_database.png)
+
+### Stale queries
+
+When you search, a [persistent map/reduce index](http://pouchdb.com/api.html#query_database) is created behind the scenes, in order to save the indexed data and provide the fastest possible queries.
+
+This means you can use the `stale` options, as in the `query()` API, to get faster but less accurate results:
+
+```js
+// return immediately, update the index afterwards
+pouch.search({
+  query: 'donkey kong',
+  fields: ['title', 'text'],
+  stale: 'update_after'
+});
+```
+
+or
+
+```js
+// 
+pouch.search({
+  query: 'donkey kong',
+  fields: ['title', 'text'],
+  stale: 'ok'
+});
+```
+
+Most likely, though, you won't want to do this unless your database is frequently changing.
 
 Algorithm
 ----
