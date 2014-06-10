@@ -62,6 +62,13 @@ PouchDB.plugin(require('pouchdb-quick-search'));
 API
 ---------
 
+**Topics:**
+
+* Basic queries[#basic_queries]
+* Document structure [#document_structure]
+* Fetching the full documents [#fetching_the_full_documents]
+
+
 ### Basic queries
 
 ```js
@@ -89,6 +96,8 @@ pouch.search({
 
 In the simplest case, you call `pouch.search()` with a `query` and a list of document `field`s to search.  If the document is missing that field, then it's simply skipped.  You can search one or more fields at a time.
 
+The results contain a list of matching document `id`s and `score`s, with the highest-scoring documents listed first.
+
 Like most PouchDB functions, the `search()` function returns a promise. But if you like callbacks, you can also use that style:
 
 ```js
@@ -110,7 +119,7 @@ Your document fields can be strings or arrays of strings.  Use dots to separate 
 
 ```js
 var doc = {
-  _id: 'mydoc3',
+  _id: 'mydoc',
   name: 'Princess Peach',
   likes: ['cakes', 'go-karts', 'turnips'],
   description: {
@@ -143,7 +152,7 @@ pouch.put(doc).then(function () {
 
 ### Fetching the full documents
 
-By default, you only get back the matching document `id`s and `score`s. You can also use `{include_docs: true}` to get back the full documents:
+By default, the results only contain a list of document `id`s and `score`s. You can also use `{include_docs: true}` to get back the full documents:
 
 ```js
 pouch.search({
