@@ -3,8 +3,6 @@ PouchDB Quick Search
 
 [![Build Status](https://travis-ci.org/nolanlawson/pouchdb-quick-search.svg)](https://travis-ci.org/nolanlawson/pouchdb-quick-search)
 
-**Nothing much to see here; this is a work in progress.**
-
 ```js
 var pouch = new PouchDB('mydb');
 var doc = {_id: 'mydoc', title: "Guess who?", text: "It's-a me, Mario!"};
@@ -24,9 +22,9 @@ pouch.put(doc).then(function () {
 
 A very efficient and accurate full-text search engine built on top of PouchDB. Analyzes English text, indexes it in a database, and allows you to query for documents using a simple API. Ideal for PhoneGap apps or any webapp that needs offline search support.
 
-This is a local plugin, so it is not designed to work against CouchDB/Cloudant/etc.  If you'd like to search against the server, use the CouchDB Lucene plugin or something similar.
+This is a local plugin, so it is not designed to work against CouchDB/Cloudant/etc.  If you'd like to search against the server, use the [CouchDB Lucene plugin](https://github.com/rnewson/couchdb-lucene), [Cloudant's search indexes](https://cloudant.com/for-developers/search/), or something similar.
 
-If you need prefix search (e.g. for autocompletion), then just use PouchDB itself.  The `allDocs()`/`query()` APIs plus `startkey` should give you everything you need for prefix lookup.
+If you need prefix search (e.g. for autocompletion), then just use PouchDB itself.  The `allDocs()` and `query()` APIs plus `startkey` should give you everything you need for prefix lookup.
 
 The underlying tokenization/stemming/stopword engine is [Lunr][]. If you'd like to see support for other languages than English, please file an issue in that repo.
 
