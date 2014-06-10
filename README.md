@@ -64,9 +64,9 @@ API
 
 **Topics:**
 
-* Basic queries[#basic_queries]
-* Document structure [#document_structure]
-* Fetching the full documents [#fetching_the_full_documents]
+* (Basic queries)[#basic_queries]
+* (Document structure)[#document_structure]
+* (Fetching the full documents)[#fetching_the_full_documents]
 
 
 ### Basic queries
