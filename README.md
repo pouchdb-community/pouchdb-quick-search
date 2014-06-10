@@ -67,13 +67,13 @@ API
 * [Basic queries](#basic-queries)
 * [Document structure](#document-structure)
 * [Fetching the full documents](#fetching-the-full-documents)
-* [Highlighting](highlighting)
-* [Pagination](pagination)
-* [Boosting fields](boosting-fields)
-* [Minimum should match (mm)](minimum-should-match-mm)
-* [Building the index](building-the-index)
-* [Deleting the index](deleting-the-index)
-* [Stale queries](stale-queries)
+* [Highlighting](#highlighting)
+* [Pagination](#pagination)
+* [Boosting fields](#boosting-fields)
+* [Minimum should match (mm)](#minimum-should-match-mm)
+* [Building the index](#building-the-index)
+* [Deleting the index](#deleting-the-index)
+* [Stale queries](#stale-queries)
 
 
 ### Basic queries
