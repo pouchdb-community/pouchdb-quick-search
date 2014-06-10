@@ -64,9 +64,16 @@ API
 
 **Topics:**
 
-* (Basic queries)[#basic_queries]
-* (Document structure)[#document_structure]
-* (Fetching the full documents)[#fetching_the_full_documents]
+* [Basic queries](#basic-queries)
+* [Document structure](#document-structure)
+* [Fetching the full documents](#fetching-the-full-documents)
+* [Highlighting](highlighting)
+* [Pagination](pagination)
+* [Boosting fields](boosting-fields)
+* [Minimum should match (mm)](minimum-should-match-mm)
+* [Building the index](building-the-index)
+* [Deleting the index](deleting-the-index)
+* [Stale queries](stale-queries)
 
 
 ### Basic queries
@@ -356,7 +363,7 @@ pouch.search({
 
 The default `mm` value is `100%`.  All values must be provided as a percentage (ints are okay).
 
-### Build an index
+### Building the index
 
 If you only use the `search()` method as described above, then it will be slow the first time you query, because the index has to be built up.
 
@@ -377,7 +384,7 @@ This will build up the index without querying it. If the database has changed si
 
 You must at least provide the `fields` you want to index.  Boosts don't matter.
 
-### Deleting an index
+### Deleting the index
 
 If, for whatever reason, you need to delete an index that's been saved to disk, you can pass in `{destroy: true}` to the `search()` function, and instead of searching, it will delete the external search database.
 
