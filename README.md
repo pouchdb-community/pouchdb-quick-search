@@ -101,11 +101,11 @@ pouch.search({
 }
 ```
 
-In the simplest case, you call `pouch.search()` with a `query` and a list of document `field`s to search.  If the document is missing that field, then it's simply skipped.  You can search one or more fields at a time.
+In the simplest case, you call `pouch.search()` with a `query` and a list of document `field`s to search. The results contain a list of matching document `id`s and `score`s, sorted from high to low.
 
-The results contain a list of matching document `id`s and `score`s, with the highest-scoring documents listed first.
+If any document is missing a field, then it's simply ignored.  You can search one or more fields at a time.
 
-Like most PouchDB functions, the `search()` function returns a promise. But if you like callbacks, you can also use that style:
+Like most of the PouchDB API, the `search()` function returns a promise. But if you like callbacks, you can also use that style:
 
 ```js
 pouch.search({
