@@ -1,5 +1,13 @@
 'use strict';
 
+// TODO: temporary hack that may go away
+// later when map/reduce is broken out
+// into persistence + map/reduce
+var mapReduce = require('pouchdb-mapreduce');
+Object.keys(mapReduce).forEach(function (key) {
+  exports[key] = mapReduce[key];
+});
+
 var utils = require('./pouch-utils');
 var lunr = require('lunr');
 var uniq = require('uniq');
@@ -121,11 +129,11 @@ exports.search = utils.toPromise(function (opts, callback) {
   };
   if (destroy) {
     queryOpts.destroy = true;
-    return pouch.query(mapFun, queryOpts, callback);
+    return pouch._search_query(mapFun, queryOpts, callback);
   } else if (build) {
     delete queryOpts.stale; // update immediately
     queryOpts.limit = 0;
-    pouch.query(mapFun, queryOpts).then(function () {
+    pouch._search_query(mapFun, queryOpts).then(function () {
       callback(null, {ok: true});
     }).catch(callback);
     return;
@@ -162,7 +170,7 @@ exports.search = utils.toPromise(function (opts, callback) {
   //
 
   // step 1
-  pouch.query(mapFun, queryOpts).then(function (res) {
+  pouch._search_query(mapFun, queryOpts).then(function (res) {
 
     if (!res.rows.length) {
       return callback(null, {rows: []});
@@ -230,7 +238,7 @@ exports.search = utils.toPromise(function (opts, callback) {
     };
 
     // step 2
-    return pouch.query(mapFun, queryOpts).then(function (res) {
+    return pouch._search_query(mapFun, queryOpts).then(function (res) {
 
       var docIdsToFieldsToNorms = {};
       res.rows.forEach(function (row) {
