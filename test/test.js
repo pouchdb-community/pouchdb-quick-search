@@ -36,6 +36,7 @@ var docs2 = require('./docs/test-docs-2');
 var docs3 = require('./docs/test-docs-3');
 var docs4 = require('./docs/test-docs-4');
 var docs5 = require('./docs/test-docs-5');
+var docs6 = require('./docs/test-docs-6');
 
 function tests(dbName, dbType) {
 
@@ -589,6 +590,19 @@ function tests(dbName, dbType) {
       }).then(function (res) {
         var ids = res.rows.map(function (x) { return x.id; });
         ids.should.deep.equal(['3']);
+      });
+    });
+    it('weights higher when words are mentioned more than once', function () {
+      return db.bulkDocs({docs: docs6}).then(function () {
+        var opts = {
+          fields: ['text'],
+          query: 'word'
+        };
+        return db.search(opts);
+      }).then(function (res) {
+        var ids = res.rows.map(function (x) { return x.id; });
+        ids.should.deep.equal(['1', '2']);
+        res.rows[0].score.should.not.equal(res.rows[1].score);
       });
     });
   });
