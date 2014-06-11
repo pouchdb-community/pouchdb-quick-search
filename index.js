@@ -13,7 +13,7 @@ var lunr = require('lunr');
 var uniq = require('uniq');
 var Promise = utils.Promise;
 
-var index = lunr();
+var indexes = {};
 
 var TYPE_TOKEN_COUNT = 'a';
 var TYPE_DOC_INFO = 'b';
@@ -26,7 +26,7 @@ function add(left, right) {
 // in the future, we might expand this to do more than just
 // English. Also, this is a private Lunr API, hence why
 // the Lunr version is pegged.
-function getTokenStream(text) {
+function getTokenStream(text, index) {
   return index.pipeline.run(lunr.tokenizer(text));
 }
 
@@ -56,7 +56,7 @@ function getText(fieldBoost, doc) {
 // map function that gets passed to map/reduce
 // emits two types of key/values - one for each token
 // and one for the field-len-norm
-function createMapFunction(fieldBoosts) {
+function createMapFunction(fieldBoosts, index) {
   return function (doc, emit) {
     var docInfo = [];
 
@@ -67,7 +67,7 @@ function createMapFunction(fieldBoosts) {
 
       var fieldLenNorm;
       if (text) {
-        var terms = getTokenStream(text);
+        var terms = getTokenStream(text, index);
         for (var j = 0, jLen = terms.length; j < jLen; j++) {
           var term = terms[j];
           // avoid emitting the value if there's only one field;
@@ -99,6 +99,7 @@ exports.search = utils.toPromise(function (opts, callback) {
   var limit = opts.limit;
   var build = opts.build;
   var skip = opts.skip || 0;
+  var language = opts.language || 'en';
 
   if (Array.isArray(fields)) {
     var fieldsMap = {};
@@ -117,12 +118,23 @@ exports.search = utils.toPromise(function (opts, callback) {
     };
   });
 
+  var index = indexes[language];
+  if (!index) {
+    index = indexes[language] = lunr();
+    if (language !== 'en') {
+      index.use(global.lunr[language]);
+    }
+  }
+
   // the index we save as a separate database is uniquely identified
   // by the fields the user want to index (boost doesn't matter)
-  var persistedIndexName = 'search-' + utils.MD5(JSON.stringify(
-      fieldBoosts.map(function (x) { return x.field; }).sort()));
+  // plus the tokenizer
+  var persistedIndexName = 'search-' + utils.MD5(JSON.stringify({
+    language: language,
+    fields: fieldBoosts.map(function (x) { return x.field; }).sort()
+  }));
 
-  var mapFun = createMapFunction(fieldBoosts);
+  var mapFun = createMapFunction(fieldBoosts, index);
 
   var queryOpts = {
     saveAs: persistedIndexName
@@ -142,7 +154,7 @@ exports.search = utils.toPromise(function (opts, callback) {
   // it shouldn't matter if the user types the same
   // token more than once, in fact I think even Lucene does this
   // special cases like boingo boingo and mother mother are rare
-  var queryTerms = uniq(getTokenStream(q));
+  var queryTerms = uniq(getTokenStream(q, index));
   if (!queryTerms.length) {
     return callback(null, {rows: []});
   }
@@ -387,4 +399,9 @@ function applyHighlighting(pouch, opts, rows, fieldBoosts,
 /* istanbul ignore next */
 if (typeof window !== 'undefined' && window.PouchDB) {
   window.PouchDB.plugin(exports);
+  if (!('lunr' in window)) {
+    window.lunr = {
+      info: 'bogus window.lunr object created for supporting lunr-languages'
+    };
+  }
 }

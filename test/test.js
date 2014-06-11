@@ -19,6 +19,11 @@ chai.use(require("chai-as-promised"));
 var should = chai.should(); // var should = chai.should();
 require('bluebird'); // var Promise = require('bluebird');
 
+// have to make this global for the languages plugin, sadly
+global.lunr = require('lunr');
+require('./deps/lunr.stemmer.support');
+require('./deps/lunr.fr');
+
 var dbs;
 if (process.browser) {
   dbs = 'testdb' + Math.random();
@@ -603,6 +608,37 @@ function tests(dbName, dbType) {
         var ids = res.rows.map(function (x) { return x.id; });
         ids.should.deep.equal(['1', '2']);
         res.rows[0].score.should.not.equal(res.rows[1].score);
+      });
+    });
+
+    it('indexes english and french simultaneously', function () {
+      return db.bulkDocs({docs: docs6}).then(function () {
+        var opts = {
+          fields: ['text'],
+          query: 'française',
+          language: 'fr'
+        };
+        return db.search(opts);
+      }).then(function (res) {
+        var ids = res.rows.map(function (x) { return x.id; });
+        ids.should.deep.equal(['2']);
+        return db.search({
+          fields: ['text'],
+          query: 'française',
+          language: 'en',
+          stale: 'ok'
+        });
+      }).then(function (res) {
+        res.rows.should.have.length(0);
+        return db.search({
+          fields: ['text'],
+          query: 'spleen',
+          language: 'en',
+          stale: 'ok'
+        });
+      }).then(function (res) {
+        var ids = res.rows.map(function (x) { return x.id; }).sort();
+        ids.should.deep.equal(['1', '2']);
       });
     });
   });
