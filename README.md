@@ -428,13 +428,13 @@ Most likely, though, you won't want to do this unless your database is frequentl
 
 ### Other languages
 
-The default Lunr stemmer uses the Porter stemmer, which is optimized for English. So for instance, the words "work," "worked," "working," and "works" would all resolve to the same stem using the default settings.
+The default Lunr pipeline uses the Porter stemmer, which is optimized for English. So for instance, the words "work," "worked," "working," and "works" would all resolve to the same stem using the default settings.
 
-Obviously other languages have different morphologies, so to support these language, this plugin can integrate with the [lunr-languages](https://github.com/MihaiValentin/lunr-languages) plugin.
+Obviously other languages have different morphologies (and stopwords), so to support these language, this plugin can integrate with the [lunr-languages](https://github.com/MihaiValentin/lunr-languages) plugin.
 
 To use another language, first follow the [lunr-languages instructions](https://github.com/MihaiValentin/lunr-languages#how-to-use) to install the language of your choice.
 
-Next, use the `langauge` option when you search:
+Next, use the `language` option when you search:
 
 ```js
 pouch.search({
@@ -489,8 +489,9 @@ pouch.search({
 }
 ```
 
-If you don't specify a `language`, then the default is `'en'`. Separate external databases will be built up on disk per language (and per field), so you may want to keep that in mind if you're using the `destroy` and `build` options.
+If you don't specify a `language`, then the default is `'en'`. Under the hood, separate external databases will be created per language (and per `fields` definition), so you may want to keep that in mind if you're using the `destroy` and `build` options.
 
+**Note:** currently the lunr-languages plugin expects a global `lunr` object, so unfortunately you will have to include lunr as an extra dependency in your project and assign it to global (as described in the lunr-languages instructions).  Hopefully this will be fixed in the future.
 
 Algorithm
 ----
