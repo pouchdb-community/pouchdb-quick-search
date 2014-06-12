@@ -26,7 +26,7 @@ This is a local plugin, so it is not designed to work against CouchDB/Cloudant/e
 
 If you need prefix search (e.g. for autocompletion), then just use PouchDB itself.  The `allDocs()` and `query()` APIs plus `startkey` should give you everything you need for prefix lookup.
 
-The underlying tokenization/stemming/stopword engine is [Lunr][]. If you'd like to see support for other languages than English, please file an issue in that repo.
+The underlying tokenization/stemming/stopword engine is [Lunr][], which is optimized for English text, using a variant of the [Porter stemmer](http://tartarus.org/~martin/PorterStemmer/index.html). To optimize for other languages, check out [lunr-languages](https://github.com/MihaiValentin/lunr-languages) and see instructions below for the `language` option.
 
 Usage
 --------
@@ -72,6 +72,7 @@ API
 * [Building the index](#building-the-index)
 * [Deleting the index](#deleting-the-index)
 * [Stale queries](#stale-queries)
+* [Other languages](#other-languages)
 
 
 ### Basic queries
@@ -424,6 +425,72 @@ pouch.search({
 ```
 
 Most likely, though, you won't want to do this unless your database is frequently changing.
+
+### Other languages
+
+The default Lunr stemmer uses the Porter stemmer, which is optimized for English. So for instance, the words "work," "worked," "working," and "works" would all resolve to the same stem using the default settings.
+
+Obviously other languages have different morphologies, so to support these language, this plugin can integrate with the [lunr-languages](https://github.com/MihaiValentin/lunr-languages) plugin.
+
+To use another language, first follow the [lunr-languages instructions](https://github.com/MihaiValentin/lunr-languages#how-to-use) to install the language of your choice.
+
+Next, use the `langauge` option when you search:
+
+```js
+pouch.search({
+  query: 'marche', 
+  fields: ['text'], 
+  include_docs: true,
+  language: 'fr'
+});
+```
+
+```js
+{
+  "rows": [
+    {
+       "doc": {
+         "_id": "french-doc",
+         "_rev": "1-997cba2d79a6f803c6040ddbedee642f",
+         "text": "Ça va marcher."
+       },
+       "id": "french-doc",
+       "score": 0.7071067811865475
+    }
+  ]
+}
+```
+
+You can still query in English:
+
+```js
+pouch.search({
+  query: 'works', 
+  fields: ['text'], 
+  include_docs: true
+});
+```
+
+**Response:**
+
+```js
+{
+  "rows": [
+    {
+      "doc": {
+        "_id": "english-doc",
+        "_rev": "1-48f9b2f4f17fc352fa53a21dca7e188e",
+        "text": "This will work."
+      },
+      "id": "english-doc",
+      "score": 1
+    }
+  ]
+}
+```
+
+If you don't specify a `language`, then the default is `'en'`. Separate external databases will be built up on disk per language (and per field), so you may want to keep that in mind if you're using the `destroy` and `build` options.
+
 
 Algorithm
 ----
