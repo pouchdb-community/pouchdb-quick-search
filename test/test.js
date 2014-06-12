@@ -625,7 +625,7 @@ function tests(dbName, dbType) {
         ids.should.deep.equal(['2']);
         return db.search({
           fields: ['text'],
-          query: 'parlera',
+          query: 'parlera', // parlera -> parle, wouldn't work in English
           language: 'en',
           stale: 'ok'
         });
@@ -647,6 +647,14 @@ function tests(dbName, dbType) {
       }).then(function (res) {
         var ids = res.rows.map(function (x) { return x.id; }).sort();
         ids.should.deep.equal(['1', '2']);
+        return db.search({
+          fields: ['text'],
+          query: 'works', // working -> works, wouldn't work in French
+          language: 'en'
+        });
+      }).then(function (res) {
+        var ids = res.rows.map(function (x) { return x.id; }).sort();
+        ids.should.deep.equal(['3']);
       });
     });
   });
