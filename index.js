@@ -399,9 +399,4 @@ function applyHighlighting(pouch, opts, rows, fieldBoosts,
 /* istanbul ignore next */
 if (typeof window !== 'undefined' && window.PouchDB) {
   window.PouchDB.plugin(exports);
-  if (!('lunr' in window)) {
-    window.lunr = {
-      info: 'bogus window.lunr object created for supporting lunr-languages'
-    };
-  }
 }
