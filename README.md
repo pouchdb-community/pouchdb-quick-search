@@ -445,6 +445,8 @@ pouch.search({
 });
 ```
 
+**Response:**
+
 ```js
 {
   "rows": [
