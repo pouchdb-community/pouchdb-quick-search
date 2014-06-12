@@ -655,6 +655,22 @@ function tests(dbName, dbType) {
       }).then(function (res) {
         var ids = res.rows.map(function (x) { return x.id; }).sort();
         ids.should.deep.equal(['3']);
+        return db.search({
+          fields: ['text'],
+          query: 'works',
+          stale: 'ok' // no lang specified, default should be english
+        });
+      }).then(function (res) {
+        var ids = res.rows.map(function (x) { return x.id; }).sort();
+        ids.should.deep.equal(['3']);
+        return db.search({
+          fields: ['text'],
+          query: 'parlera',
+          language: 'fr'
+        });
+      }).then(function (res) {
+        var ids = res.rows.map(function (x) { return x.id; });
+        ids.should.deep.equal(['2']);
       });
     });
   });
