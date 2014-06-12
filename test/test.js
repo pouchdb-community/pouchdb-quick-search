@@ -42,6 +42,7 @@ var docs3 = require('./docs/test-docs-3');
 var docs4 = require('./docs/test-docs-4');
 var docs5 = require('./docs/test-docs-5');
 var docs6 = require('./docs/test-docs-6');
+var docs7 = require('./docs/test-docs-7');
 
 function tests(dbName, dbType) {
 
@@ -612,10 +613,10 @@ function tests(dbName, dbType) {
     });
 
     it('indexes english and french simultaneously', function () {
-      return db.bulkDocs({docs: docs6}).then(function () {
+      return db.bulkDocs({docs: docs7}).then(function () {
         var opts = {
           fields: ['text'],
-          query: 'française',
+          query: 'parlera',
           language: 'fr'
         };
         return db.search(opts);
@@ -624,7 +625,7 @@ function tests(dbName, dbType) {
         ids.should.deep.equal(['2']);
         return db.search({
           fields: ['text'],
-          query: 'française',
+          query: 'parlera',
           language: 'en',
           stale: 'ok'
         });
@@ -635,6 +636,13 @@ function tests(dbName, dbType) {
           query: 'spleen',
           language: 'en',
           stale: 'ok'
+        });
+      }).then(function (res) {
+        res.rows.should.have.length(0);
+        return db.search({
+          fields: ['text'],
+          query: 'spleen',
+          language: 'en'
         });
       }).then(function (res) {
         var ids = res.rows.map(function (x) { return x.id; }).sort();

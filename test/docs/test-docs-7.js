@@ -7,6 +7,6 @@ module.exports = [
   },
   {
     _id: '2',
-    text: 'Ça c\'est du texte français qui mentionne le spleen, ce qui veut dire ennui.'
+    text: 'Ça c\'est du texte français qui parle du spleen, ce qui veut dire ennui.'
   }
 ];
