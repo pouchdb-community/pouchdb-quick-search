@@ -381,7 +381,7 @@ pouch.search({
 
 This will build up the index without querying it. If the database has changed since you last updated (e.g. new documents were added), then it will simply update the index with the new documents. If nothing has changed, then it won't do anything.
 
-You must at least provide the `fields` you want to index.  Boosts don't matter.
+You must at least provide the `fields` you want to index.  If the language isn't English, you must pass in the `language` option.  Boosts don't matter.
 
 ### Deleting the index
 
@@ -394,7 +394,7 @@ pouch.search({
 });
 ```
 
-When you do this, you _must_ at least provide the `fields`, because external databases are created and identified based on the fields you want to index.  I.e. for every unique `fields` combination you want to index, a separate database will be created especially for that query. If you open up your developer tools, you can see it; it should have a name like `<mydbname>-search-<md5sum>` and look like this:
+When you do this, you _must_ at least provide the `fields`, because external databases are created and identified based on the fields you want to index.  You should also provide the `language` option if the language is something other than English. I.e., for every unique `fields` combination you want to index (plus `language` if non-English), a separate database will be created especially for that query. If you open up your developer tools, you can see it; it should have a name like `<mydbname>-search-<md5sum>` and look like this:
 
 ![extra database created for search](https://raw.githubusercontent.com/nolanlawson/pouchdb-quick-search/master/docs/extra_database.png)
 
