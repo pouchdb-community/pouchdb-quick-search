@@ -673,5 +673,52 @@ function tests(dbName, dbType) {
         ids.should.deep.equal(['2']);
       });
     });
+
+    it('search with filter', function () {
+
+      // the word "court" is used in all 3 docs
+      // but we filter out the doc._id === "2"
+
+      return db.bulkDocs({docs: docs}).then(function () {
+        var opts = {
+          fields: ['title', 'text', 'desc'],
+          query: 'court',
+          filter: function (doc) { return doc._id !== "2"; }
+        };
+        return db.search(opts);
+      }).then(function (res) {
+        res.rows.length.should.equal(2);
+        var ids = res.rows.map(function (x) { return x.id; });
+        ids.should.deep.equal(['3', '1']);
+      });
+    });
+
+    it('search with filter - Error thrown ', function () {
+
+      //the filter function will throw an Error for
+      //one doc, which filter it out.
+
+      var error;
+
+      //filter function throw an error ?
+      db.on('error', function (err) {
+        error = err;
+      });
+
+      return db.bulkDocs({docs: docs}).then(function () {
+        var opts = {
+          fields: ['title', 'text', 'desc'],
+          query: 'court',
+          filter: function (doc) { if (doc._id === '1') { throw new Error("oups"); } return true; }
+        };
+        return db.search(opts);
+      }).then(function (res) {
+        res.rows.length.should.equal(2);
+        var ids = res.rows.map(function (x) { return x.id; });
+        ids.should.deep.equal(['2', '3']);
+        error.should.have.property('message', 'oups');
+      });
+    });
+
   });
 }

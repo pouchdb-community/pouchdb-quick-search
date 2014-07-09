@@ -56,8 +56,13 @@ function getText(fieldBoost, doc) {
 // map function that gets passed to map/reduce
 // emits two types of key/values - one for each token
 // and one for the field-len-norm
-function createMapFunction(fieldBoosts, index) {
+function createMapFunction(fieldBoosts, index, filter, db) {
   return function (doc, emit) {
+
+    if (isFiltered(doc, filter, db)) {
+      return;
+    }
+
     var docInfo = [];
 
     for (var i = 0, len = fieldBoosts.length; i < len; i++) {
@@ -100,6 +105,7 @@ exports.search = utils.toPromise(function (opts, callback) {
   var build = opts.build;
   var skip = opts.skip || 0;
   var language = opts.language || 'en';
+  var filter = opts.filter;
 
   if (Array.isArray(fields)) {
     var fieldsMap = {};
@@ -129,12 +135,19 @@ exports.search = utils.toPromise(function (opts, callback) {
   // the index we save as a separate database is uniquely identified
   // by the fields the user want to index (boost doesn't matter)
   // plus the tokenizer
-  var persistedIndexName = 'search-' + utils.MD5(JSON.stringify({
-    language: language,
-    fields: fieldBoosts.map(function (x) { return x.field; }).sort()
-  }));
 
-  var mapFun = createMapFunction(fieldBoosts, index);
+  var indexParams =  {
+    language: language,
+    fields: fieldBoosts.map(function (x) { return x.field; }).sort(),
+  };
+
+  if (filter) {
+    indexParams.filter = filter.toString();
+  }
+
+  var persistedIndexName = 'search-' + utils.MD5(JSON.stringify(indexParams));
+
+  var mapFun = createMapFunction(fieldBoosts, index, filter, pouch);
 
   var queryOpts = {
     saveAs: persistedIndexName
@@ -394,6 +407,17 @@ function applyHighlighting(pouch, opts, rows, fieldBoosts,
   })).then(function () {
     return rows;
   });
+}
+
+// return true if filtered, false otherwise
+// limit the try/catch to its own function to avoid deoptimization
+function isFiltered(doc, filter, db) {
+  try {
+    return !!(filter && !filter(doc));
+  } catch (e) {
+    db.emit('error', e);
+    return true;
+  }
 }
 
 /* istanbul ignore next */
