@@ -69,6 +69,7 @@ API
 * [Pagination](#pagination)
 * [Boosting fields](#boosting-fields)
 * [Minimum should match (mm)](#minimum-should-match-mm)
+* [Filtering documents](#filtering-documents)
 * [Building the index](#building-the-index)
 * [Deleting the index](#deleting-the-index)
 * [Stale queries](#stale-queries)
@@ -362,6 +363,30 @@ pouch.search({
 
 The default `mm` value is `100%`.  All values must be provided as a percentage (ints are okay).
 
+### Filtering documents
+
+If you only want to index a subset of your documents, you can include a filter function that tells us which documents to skip. The filter function should return `true` for documents you want to index, and `false` for documents you want to skip. (Truthy/falsy values are also okay.)
+
+Example:
+
+```js
+pouch.search({
+  query: 'foo',
+  fields: ['title', 'text'],
+  filter: function (doc) {
+    return doc.type === 'person'; // only index persons
+  }
+}).then(function (info) {
+  // handle result
+}).catch(function (err) {
+  // handle error
+});
+```
+
+The `filter` option, like `fields` and `language`, affects the identity of the underlying index, so it affects building and deleting (see building/deleting below).
+
+Thanks to [Jean-Felix Girard](https://github.com/jfgirard) for implementing this feature!
+
 ### Building the index
 
 If you only use the `search()` method as described above, then it will be slow the first time you query, because the index has to be built up.
@@ -374,7 +399,7 @@ pouch.search({
   build: true
 }).then(function (info) {
   // if build was successful, info is {"ok": true}
-}).then(function (err) {
+}).catch(function (err) {
   // handle error
 });
 ```
