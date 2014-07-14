@@ -32,14 +32,14 @@
     "coverage": "npm test --coverage && istanbul check-coverage --lines 100 --function 100 --statements 100 --branches 100"
   },
   "dependencies": {
-    "pouchdb-mapreduce": "nolanlawson/mapreduce#persistence-fork",
     "argsarray": "0.0.1",
     "es3ify": "^0.1.3",
     "inherits": "~2.0.1",
     "lie": "^2.6.0",
-    "lunr": "0.5.3",
+    "lunr": "0.5.4",
     "md5-jkmyers": "0.0.1",
     "pouchdb-extend": "^0.1.0",
+    "pouchdb-mapreduce": "nolanlawson/mapreduce#persistence-fork",
     "uniq": "^1.0.1"
   },
   "devDependencies": {
