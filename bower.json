@@ -1,7 +1,7 @@
 {
   "name": "pouchdb-quick-search",
   "main": "dist/pouchdb.quick-search.js",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "homepage": "https://github.com/nolanlawson/pouchdb-quick-search",
   "authors": [
     "Nolan Lawson <nolan.lawson@gmail.com>"
