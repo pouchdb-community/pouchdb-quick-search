@@ -57,8 +57,13 @@ function getText(fieldBoost, doc) {
 // map function that gets passed to map/reduce
 // emits two types of key/values - one for each token
 // and one for the field-len-norm
-function createMapFunction(fieldBoosts, index) {
+function createMapFunction(fieldBoosts, index, filter, db) {
   return function (doc, emit) {
+
+    if (isFiltered(doc, filter, db)) {
+      return;
+    }
+
     var docInfo = [];
 
     for (var i = 0, len = fieldBoosts.length; i < len; i++) {
@@ -101,6 +106,7 @@ exports.search = utils.toPromise(function (opts, callback) {
   var build = opts.build;
   var skip = opts.skip || 0;
   var language = opts.language || 'en';
+  var filter = opts.filter;
 
   if (Array.isArray(fields)) {
     var fieldsMap = {};
@@ -130,12 +136,19 @@ exports.search = utils.toPromise(function (opts, callback) {
   // the index we save as a separate database is uniquely identified
   // by the fields the user want to index (boost doesn't matter)
   // plus the tokenizer
-  var persistedIndexName = 'search-' + utils.MD5(JSON.stringify({
+
+  var indexParams =  {
     language: language,
     fields: fieldBoosts.map(function (x) { return x.field; }).sort()
-  }));
+  };
 
-  var mapFun = createMapFunction(fieldBoosts, index);
+  if (filter) {
+    indexParams.filter = filter.toString();
+  }
+
+  var persistedIndexName = 'search-' + utils.MD5(JSON.stringify(indexParams));
+
+  var mapFun = createMapFunction(fieldBoosts, index, filter, pouch);
 
   var queryOpts = {
     saveAs: persistedIndexName
@@ -397,14 +410,45 @@ function applyHighlighting(pouch, opts, rows, fieldBoosts,
   });
 }
 
+// return true if filtered, false otherwise
+// limit the try/catch to its own function to avoid deoptimization
+function isFiltered(doc, filter, db) {
+  try {
+    return !!(filter && !filter(doc));
+  } catch (e) {
+    db.emit('error', e);
+    return true;
+  }
+}
+
 /* istanbul ignore next */
 if (typeof window !== 'undefined' && window.PouchDB) {
   window.PouchDB.plugin(exports);
 }
 
-},{"./pouch-utils":56,"lunr":22,"pouchdb-mapreduce":27,"uniq":55}],2:[function(require,module,exports){
+},{"./pouch-utils":35,"lunr":23,"pouchdb-mapreduce":28,"uniq":34}],2:[function(require,module,exports){
+'use strict';
 
+module.exports = argsArray;
+
+function argsArray(fun) {
+  return function () {
+    var len = arguments.length;
+    if (len) {
+      var args = [];
+      var i = -1;
+      while (++i < len) {
+        args[i] = arguments[i];
+      }
+      return fun.call(this, args);
+    } else {
+      return fun.call(this, []);
+    }
+  };
+}
 },{}],3:[function(require,module,exports){
+
+},{}],4:[function(require,module,exports){
 // shim for using process in browser
 
 var process = module.exports = {};
@@ -459,7 +503,7 @@ process.chdir = function (dir) {
     throw new Error('process.chdir is not supported');
 };
 
-},{}],4:[function(require,module,exports){
+},{}],5:[function(require,module,exports){
 if (typeof Object.create === 'function') {
   // implementation from standard node.js 'util' module
   module.exports = function inherits(ctor, superCtor) {
@@ -484,13 +528,13 @@ if (typeof Object.create === 'function') {
   }
 }
 
-},{}],5:[function(require,module,exports){
+},{}],6:[function(require,module,exports){
 'use strict';
 
 module.exports = INTERNAL;
 
 function INTERNAL() {}
-},{}],6:[function(require,module,exports){
+},{}],7:[function(require,module,exports){
 'use strict';
 var Promise = require('./promise');
 var reject = require('./reject');
@@ -504,6 +548,7 @@ module.exports = function all(iterable) {
   }
 
   var len = iterable.length;
+  var called = false;
   if (!len) {
     return resolve([]);
   }
@@ -519,17 +564,21 @@ module.exports = function all(iterable) {
   return promise;
   function allResolver(value, i) {
     resolve(value).then(resolveFromAll, function (error) {
-      handlers.reject(promise, error);
+      if (!called) {
+        called = true;
+        handlers.reject(promise, error);
+      }
     });
     function resolveFromAll(outValue) {
       values[i] = outValue;
-      if (++resolved === len) {
+      if (++resolved === len & !called) {
+        called = true;
         handlers.resolve(promise, values);
       }
     }
   }
 };
-},{"./INTERNAL":5,"./handlers":7,"./promise":9,"./reject":11,"./resolve":12}],7:[function(require,module,exports){
+},{"./INTERNAL":6,"./handlers":8,"./promise":10,"./reject":12,"./resolve":13}],8:[function(require,module,exports){
 'use strict';
 var tryCatch = require('./tryCatch');
 var resolveThenable = require('./resolveThenable');
@@ -575,13 +624,13 @@ function getThen(obj) {
     };
   }
 }
-},{"./resolveThenable":13,"./states":14,"./tryCatch":15}],8:[function(require,module,exports){
+},{"./resolveThenable":14,"./states":15,"./tryCatch":16}],9:[function(require,module,exports){
 module.exports = exports = require('./promise');
 
 exports.resolve = require('./resolve');
 exports.reject = require('./reject');
 exports.all = require('./all');
-},{"./all":6,"./promise":9,"./reject":11,"./resolve":12}],9:[function(require,module,exports){
+},{"./all":7,"./promise":10,"./reject":12,"./resolve":13}],10:[function(require,module,exports){
 'use strict';
 
 var unwrap = require('./unwrap');
@@ -627,7 +676,7 @@ Promise.prototype.then = function (onFulfilled, onRejected) {
   return promise;
 };
 
-},{"./INTERNAL":5,"./queueItem":10,"./resolveThenable":13,"./states":14,"./unwrap":16}],10:[function(require,module,exports){
+},{"./INTERNAL":6,"./queueItem":11,"./resolveThenable":14,"./states":15,"./unwrap":17}],11:[function(require,module,exports){
 'use strict';
 var handlers = require('./handlers');
 var unwrap = require('./unwrap');
@@ -656,7 +705,7 @@ QueueItem.prototype.callRejected = function (value) {
 QueueItem.prototype.otherCallRejected = function (value) {
   unwrap(this.promise, this.onRejected, value);
 };
-},{"./handlers":7,"./unwrap":16}],11:[function(require,module,exports){
+},{"./handlers":8,"./unwrap":17}],12:[function(require,module,exports){
 'use strict';
 
 var Promise = require('./promise');
@@ -668,7 +717,7 @@ function reject(reason) {
 	var promise = new Promise(INTERNAL);
 	return handlers.reject(promise, reason);
 }
-},{"./INTERNAL":5,"./handlers":7,"./promise":9}],12:[function(require,module,exports){
+},{"./INTERNAL":6,"./handlers":8,"./promise":10}],13:[function(require,module,exports){
 'use strict';
 
 var Promise = require('./promise');
@@ -703,7 +752,7 @@ function resolve(value) {
       return EMPTYSTRING;
   }
 }
-},{"./INTERNAL":5,"./handlers":7,"./promise":9}],13:[function(require,module,exports){
+},{"./INTERNAL":6,"./handlers":8,"./promise":10}],14:[function(require,module,exports){
 'use strict';
 var handlers = require('./handlers');
 var tryCatch = require('./tryCatch');
@@ -736,13 +785,13 @@ function safelyResolveThenable(self, thenable) {
   }
 }
 exports.safely = safelyResolveThenable;
-},{"./handlers":7,"./tryCatch":15}],14:[function(require,module,exports){
+},{"./handlers":8,"./tryCatch":16}],15:[function(require,module,exports){
 // Lazy man's symbols for states
 
 exports.REJECTED = ['REJECTED'];
 exports.FULFILLED = ['FULFILLED'];
 exports.PENDING = ['PENDING'];
-},{}],15:[function(require,module,exports){
+},{}],16:[function(require,module,exports){
 'use strict';
 
 module.exports = tryCatch;
@@ -758,7 +807,7 @@ function tryCatch(func, value) {
   }
   return out;
 }
-},{}],16:[function(require,module,exports){
+},{}],17:[function(require,module,exports){
 'use strict';
 
 var immediate = require('immediate');
@@ -780,7 +829,7 @@ function unwrap(promise, func, value) {
     }
   });
 }
-},{"./handlers":7,"immediate":17}],17:[function(require,module,exports){
+},{"./handlers":8,"immediate":18}],18:[function(require,module,exports){
 'use strict';
 var types = [
   require('./nextTick'),
@@ -821,7 +870,7 @@ function immediate(task) {
     scheduleDrain();
   }
 }
-},{"./messageChannel":18,"./mutation.js":19,"./nextTick":2,"./stateChange":20,"./timeout":21}],18:[function(require,module,exports){
+},{"./messageChannel":19,"./mutation.js":20,"./nextTick":3,"./stateChange":21,"./timeout":22}],19:[function(require,module,exports){
 var global=typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {};'use strict';
 
 exports.test = function () {
@@ -840,7 +889,7 @@ exports.install = function (func) {
     channel.port2.postMessage(0);
   };
 };
-},{}],19:[function(require,module,exports){
+},{}],20:[function(require,module,exports){
 var global=typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {};'use strict';
 //based off rsvp https://github.com/tildeio/rsvp.js
 //license https://github.com/tildeio/rsvp.js/blob/master/LICENSE
@@ -863,7 +912,7 @@ exports.install = function (handle) {
     element.data = (called = ++called % 2);
   };
 };
-},{}],20:[function(require,module,exports){
+},{}],21:[function(require,module,exports){
 var global=typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {};'use strict';
 
 exports.test = function () {
@@ -888,7 +937,7 @@ exports.install = function (handle) {
     return handle;
   };
 };
-},{}],21:[function(require,module,exports){
+},{}],22:[function(require,module,exports){
 'use strict';
 exports.test = function () {
   return true;
@@ -899,9 +948,9 @@ exports.install = function (t) {
     setTimeout(t, 0);
   };
 };
-},{}],22:[function(require,module,exports){
+},{}],23:[function(require,module,exports){
 /**
- * lunr - http://lunrjs.com - A bit like Solr, but much smaller and not as bright - 0.5.3
+ * lunr - http://lunrjs.com - A bit like Solr, but much smaller and not as bright - 0.5.4
  * Copyright (C) 2014 Oliver Nightingale
  * MIT Licensed
  * @license
@@ -958,7 +1007,7 @@ var lunr = function (config) {
   return idx
 }
 
-lunr.version = "0.5.3"
+lunr.version = "0.5.4"
 /*!
  * lunr.utils
  * Copyright (C) 2014 Oliver Nightingale
@@ -1092,7 +1141,7 @@ lunr.tokenizer = function (obj) {
   }
 
   return str
-    .split(/\s+/)
+    .split(/(?:\s+|\-)/)
     .map(function (token) {
       return token.toLowerCase()
     })
@@ -2780,9 +2829,9 @@ lunr.TokenStore.prototype.toJSON = function () {
   }))
 })()
 
-},{}],23:[function(require,module,exports){
-!function(a,b){"function"==typeof define&&define.amd?define(b):"object"==typeof exports?module.exports=b():a.md5=b()}(this,function(){function a(a,b){var g=a[0],h=a[1],i=a[2],j=a[3];g=c(g,h,i,j,b[0],7,-680876936),j=c(j,g,h,i,b[1],12,-389564586),i=c(i,j,g,h,b[2],17,606105819),h=c(h,i,j,g,b[3],22,-1044525330),g=c(g,h,i,j,b[4],7,-176418897),j=c(j,g,h,i,b[5],12,1200080426),i=c(i,j,g,h,b[6],17,-1473231341),h=c(h,i,j,g,b[7],22,-45705983),g=c(g,h,i,j,b[8],7,1770035416),j=c(j,g,h,i,b[9],12,-1958414417),i=c(i,j,g,h,b[10],17,-42063),h=c(h,i,j,g,b[11],22,-1990404162),g=c(g,h,i,j,b[12],7,1804603682),j=c(j,g,h,i,b[13],12,-40341101),i=c(i,j,g,h,b[14],17,-1502002290),h=c(h,i,j,g,b[15],22,1236535329),g=d(g,h,i,j,b[1],5,-165796510),j=d(j,g,h,i,b[6],9,-1069501632),i=d(i,j,g,h,b[11],14,643717713),h=d(h,i,j,g,b[0],20,-373897302),g=d(g,h,i,j,b[5],5,-701558691),j=d(j,g,h,i,b[10],9,38016083),i=d(i,j,g,h,b[15],14,-660478335),h=d(h,i,j,g,b[4],20,-405537848),g=d(g,h,i,j,b[9],5,568446438),j=d(j,g,h,i,b[14],9,-1019803690),i=d(i,j,g,h,b[3],14,-187363961),h=d(h,i,j,g,b[8],20,1163531501),g=d(g,h,i,j,b[13],5,-1444681467),j=d(j,g,h,i,b[2],9,-51403784),i=d(i,j,g,h,b[7],14,1735328473),h=d(h,i,j,g,b[12],20,-1926607734),g=e(g,h,i,j,b[5],4,-378558),j=e(j,g,h,i,b[8],11,-2022574463),i=e(i,j,g,h,b[11],16,1839030562),h=e(h,i,j,g,b[14],23,-35309556),g=e(g,h,i,j,b[1],4,-1530992060),j=e(j,g,h,i,b[4],11,1272893353),i=e(i,j,g,h,b[7],16,-155497632),h=e(h,i,j,g,b[10],23,-1094730640),g=e(g,h,i,j,b[13],4,681279174),j=e(j,g,h,i,b[0],11,-358537222),i=e(i,j,g,h,b[3],16,-722521979),h=e(h,i,j,g,b[6],23,76029189),g=e(g,h,i,j,b[9],4,-640364487),j=e(j,g,h,i,b[12],11,-421815835),i=e(i,j,g,h,b[15],16,530742520),h=e(h,i,j,g,b[2],23,-995338651),g=f(g,h,i,j,b[0],6,-198630844),j=f(j,g,h,i,b[7],10,1126891415),i=f(i,j,g,h,b[14],15,-1416354905),h=f(h,i,j,g,b[5],21,-57434055),g=f(g,h,i,j,b[12],6,1700485571),j=f(j,g,h,i,b[3],10,-1894986606),i=f(i,j,g,h,b[10],15,-1051523),h=f(h,i,j,g,b[1],21,-2054922799),g=f(g,h,i,j,b[8],6,1873313359),j=f(j,g,h,i,b[15],10,-30611744),i=f(i,j,g,h,b[6],15,-1560198380),h=f(h,i,j,g,b[13],21,1309151649),g=f(g,h,i,j,b[4],6,-145523070),j=f(j,g,h,i,b[11],10,-1120210379),i=f(i,j,g,h,b[2],15,718787259),h=f(h,i,j,g,b[9],21,-343485551),a[0]=l(g,a[0]),a[1]=l(h,a[1]),a[2]=l(i,a[2]),a[3]=l(j,a[3])}function b(a,b,c,d,e,f){return b=l(l(b,a),l(d,f)),l(b<<e|b>>>32-e,c)}function c(a,c,d,e,f,g,h){return b(c&d|~c&e,a,c,f,g,h)}function d(a,c,d,e,f,g,h){return b(c&e|d&~e,a,c,f,g,h)}function e(a,c,d,e,f,g,h){return b(c^d^e,a,c,f,g,h)}function f(a,c,d,e,f,g,h){return b(d^(c|~e),a,c,f,g,h)}function g(b){txt="";var c,d=b.length,e=[1732584193,-271733879,-1732584194,271733878];for(c=64;c<=b.length;c+=64)a(e,h(b.substring(c-64,c)));b=b.substring(c-64);var f=[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];for(c=0;c<b.length;c++)f[c>>2]|=b.charCodeAt(c)<<(c%4<<3);if(f[c>>2]|=128<<(c%4<<3),c>55)for(a(e,f),c=0;16>c;c++)f[c]=0;return f[14]=8*d,a(e,f),e}function h(a){var b,c=[];for(b=0;64>b;b+=4)c[b>>2]=a.charCodeAt(b)+(a.charCodeAt(b+1)<<8)+(a.charCodeAt(b+2)<<16)+(a.charCodeAt(b+3)<<24);return c}function i(a){for(var b="",c=0;4>c;c++)b+=m[a>>8*c+4&15]+m[a>>8*c&15];return b}function j(a){for(var b=0;b<a.length;b++)a[b]=i(a[b]);return a.join("")}function k(a){return j(g(a))}function l(a,b){return a+b&4294967295}function l(a,b){var c=(65535&a)+(65535&b),d=(a>>16)+(b>>16)+(c>>16);return d<<16|65535&c}var m="0123456789abcdef".split("");return"5d41402abc4b2a76b9719d911017c592"!=k("hello"),k});
 },{}],24:[function(require,module,exports){
+!function(a,b){"function"==typeof define&&define.amd?define(b):"object"==typeof exports?module.exports=b():a.md5=b()}(this,function(){function a(a,b){var g=a[0],h=a[1],i=a[2],j=a[3];g=c(g,h,i,j,b[0],7,-680876936),j=c(j,g,h,i,b[1],12,-389564586),i=c(i,j,g,h,b[2],17,606105819),h=c(h,i,j,g,b[3],22,-1044525330),g=c(g,h,i,j,b[4],7,-176418897),j=c(j,g,h,i,b[5],12,1200080426),i=c(i,j,g,h,b[6],17,-1473231341),h=c(h,i,j,g,b[7],22,-45705983),g=c(g,h,i,j,b[8],7,1770035416),j=c(j,g,h,i,b[9],12,-1958414417),i=c(i,j,g,h,b[10],17,-42063),h=c(h,i,j,g,b[11],22,-1990404162),g=c(g,h,i,j,b[12],7,1804603682),j=c(j,g,h,i,b[13],12,-40341101),i=c(i,j,g,h,b[14],17,-1502002290),h=c(h,i,j,g,b[15],22,1236535329),g=d(g,h,i,j,b[1],5,-165796510),j=d(j,g,h,i,b[6],9,-1069501632),i=d(i,j,g,h,b[11],14,643717713),h=d(h,i,j,g,b[0],20,-373897302),g=d(g,h,i,j,b[5],5,-701558691),j=d(j,g,h,i,b[10],9,38016083),i=d(i,j,g,h,b[15],14,-660478335),h=d(h,i,j,g,b[4],20,-405537848),g=d(g,h,i,j,b[9],5,568446438),j=d(j,g,h,i,b[14],9,-1019803690),i=d(i,j,g,h,b[3],14,-187363961),h=d(h,i,j,g,b[8],20,1163531501),g=d(g,h,i,j,b[13],5,-1444681467),j=d(j,g,h,i,b[2],9,-51403784),i=d(i,j,g,h,b[7],14,1735328473),h=d(h,i,j,g,b[12],20,-1926607734),g=e(g,h,i,j,b[5],4,-378558),j=e(j,g,h,i,b[8],11,-2022574463),i=e(i,j,g,h,b[11],16,1839030562),h=e(h,i,j,g,b[14],23,-35309556),g=e(g,h,i,j,b[1],4,-1530992060),j=e(j,g,h,i,b[4],11,1272893353),i=e(i,j,g,h,b[7],16,-155497632),h=e(h,i,j,g,b[10],23,-1094730640),g=e(g,h,i,j,b[13],4,681279174),j=e(j,g,h,i,b[0],11,-358537222),i=e(i,j,g,h,b[3],16,-722521979),h=e(h,i,j,g,b[6],23,76029189),g=e(g,h,i,j,b[9],4,-640364487),j=e(j,g,h,i,b[12],11,-421815835),i=e(i,j,g,h,b[15],16,530742520),h=e(h,i,j,g,b[2],23,-995338651),g=f(g,h,i,j,b[0],6,-198630844),j=f(j,g,h,i,b[7],10,1126891415),i=f(i,j,g,h,b[14],15,-1416354905),h=f(h,i,j,g,b[5],21,-57434055),g=f(g,h,i,j,b[12],6,1700485571),j=f(j,g,h,i,b[3],10,-1894986606),i=f(i,j,g,h,b[10],15,-1051523),h=f(h,i,j,g,b[1],21,-2054922799),g=f(g,h,i,j,b[8],6,1873313359),j=f(j,g,h,i,b[15],10,-30611744),i=f(i,j,g,h,b[6],15,-1560198380),h=f(h,i,j,g,b[13],21,1309151649),g=f(g,h,i,j,b[4],6,-145523070),j=f(j,g,h,i,b[11],10,-1120210379),i=f(i,j,g,h,b[2],15,718787259),h=f(h,i,j,g,b[9],21,-343485551),a[0]=l(g,a[0]),a[1]=l(h,a[1]),a[2]=l(i,a[2]),a[3]=l(j,a[3])}function b(a,b,c,d,e,f){return b=l(l(b,a),l(d,f)),l(b<<e|b>>>32-e,c)}function c(a,c,d,e,f,g,h){return b(c&d|~c&e,a,c,f,g,h)}function d(a,c,d,e,f,g,h){return b(c&e|d&~e,a,c,f,g,h)}function e(a,c,d,e,f,g,h){return b(c^d^e,a,c,f,g,h)}function f(a,c,d,e,f,g,h){return b(d^(c|~e),a,c,f,g,h)}function g(b){txt="";var c,d=b.length,e=[1732584193,-271733879,-1732584194,271733878];for(c=64;c<=b.length;c+=64)a(e,h(b.substring(c-64,c)));b=b.substring(c-64);var f=[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];for(c=0;c<b.length;c++)f[c>>2]|=b.charCodeAt(c)<<(c%4<<3);if(f[c>>2]|=128<<(c%4<<3),c>55)for(a(e,f),c=0;16>c;c++)f[c]=0;return f[14]=8*d,a(e,f),e}function h(a){var b,c=[];for(b=0;64>b;b+=4)c[b>>2]=a.charCodeAt(b)+(a.charCodeAt(b+1)<<8)+(a.charCodeAt(b+2)<<16)+(a.charCodeAt(b+3)<<24);return c}function i(a){for(var b="",c=0;4>c;c++)b+=m[a>>8*c+4&15]+m[a>>8*c&15];return b}function j(a){for(var b=0;b<a.length;b++)a[b]=i(a[b]);return a.join("")}function k(a){return j(g(a))}function l(a,b){return a+b&4294967295}function l(a,b){var c=(65535&a)+(65535&b),d=(a>>16)+(b>>16)+(c>>16);return d<<16|65535&c}var m="0123456789abcdef".split("");return"5d41402abc4b2a76b9719d911017c592"!=k("hello"),k});
+},{}],25:[function(require,module,exports){
 "use strict";
 
 // Extends method
@@ -2930,7 +2979,7 @@ module.exports = extend;
 
 
 
-},{}],25:[function(require,module,exports){
+},{}],26:[function(require,module,exports){
 'use strict';
 
 var upsert = require('./upsert');
@@ -3026,7 +3075,7 @@ module.exports = function (opts) {
   });
 };
 
-},{"./upsert":53,"./utils":54}],26:[function(require,module,exports){
+},{"./upsert":32,"./utils":33}],27:[function(require,module,exports){
 'use strict';
 
 module.exports = function (func, emit, sum, log, isArray, toJSON) {
@@ -3034,7 +3083,7 @@ module.exports = function (func, emit, sum, log, isArray, toJSON) {
   return eval("'use strict'; (" + func.replace(/;\s*$/, "") + ");");
 };
 
-},{}],27:[function(require,module,exports){
+},{}],28:[function(require,module,exports){
 'use strict';
 
 var pouchCollate = require('pouchdb-collate');
@@ -3804,159 +3853,7 @@ function QueryParseError(message) {
 
 utils.inherits(QueryParseError, Error);
 
-},{"./create-view":25,"./evalfunc":26,"./taskqueue":52,"./utils":54,"pouchdb-collate":49}],28:[function(require,module,exports){
-'use strict';
-
-module.exports = argsArray;
-
-function argsArray(fun) {
-  return function () {
-    var len = arguments.length;
-    if (len) {
-      var args = [];
-      var i = -1;
-      while (++i < len) {
-        args[i] = arguments[i];
-      }
-      return fun.call(this, args);
-    } else {
-      return fun.call(this, []);
-    }
-  };
-}
-},{}],29:[function(require,module,exports){
-module.exports=require(4)
-},{}],30:[function(require,module,exports){
-module.exports=require(5)
-},{}],31:[function(require,module,exports){
-arguments[4][6][0].apply(exports,arguments)
-},{"./INTERNAL":30,"./handlers":33,"./promise":35,"./reject":37,"./resolve":38}],32:[function(require,module,exports){
-'use strict';
-
-module.exports = getThen;
-
-function getThen(obj) {
-  // Make sure we only access the accessor once as required by the spec
-  var then = obj && obj.then;
-  if (obj && typeof obj === 'object' && typeof then === 'function') {
-    return function appyThen() {
-      then.apply(obj, arguments);
-    };
-  }
-}
-},{}],33:[function(require,module,exports){
-'use strict';
-var tryCatch = require('./tryCatch');
-var getThen = require('./getThen');
-var resolveThenable = require('./resolveThenable');
-var states = require('./states');
-
-exports.resolve = function (self, value) {
-  var result = tryCatch(getThen, value);
-  if (result.status === 'error') {
-    return exports.reject(self, result.value);
-  }
-  var thenable = result.value;
-
-  if (thenable) {
-    resolveThenable.safely(self, thenable);
-  } else {
-    self.state = states.FULFILLED;
-    self.outcome = value;
-    var i = -1;
-    var len = self.queue.length;
-    while (++i < len) {
-      self.queue[i].callFulfilled(value);
-    }
-  }
-  return self;
-};
-exports.reject = function (self, error) {
-  self.state = states.REJECTED;
-  self.outcome = error;
-  var i = -1;
-  var len = self.queue.length;
-  while (++i < len) {
-    self.queue[i].callRejected(error);
-  }
-  return self;
-};
-},{"./getThen":32,"./resolveThenable":39,"./states":40,"./tryCatch":41}],34:[function(require,module,exports){
-arguments[4][8][0].apply(exports,arguments)
-},{"./all":31,"./promise":35,"./reject":37,"./resolve":38}],35:[function(require,module,exports){
-'use strict';
-
-var unwrap = require('./unwrap');
-var INTERNAL = require('./INTERNAL');
-var resolveThenable = require('./resolveThenable');
-var states = require('./states');
-var QueueItem = require('./queueItem');
-
-module.exports = Promise;
-function Promise(resolver) {
-  if (!(this instanceof Promise)) {
-    return new Promise(resolver);
-  }
-  if (typeof resolver !== 'function') {
-    throw new TypeError('reslover must be a function');
-  }
-  this.state = states.PENDING;
-  this.queue = [];
-  if (resolver !== INTERNAL) {
-    resolveThenable.safely(this, resolver);
-  }
-}
-
-Promise.prototype['catch'] = function (onRejected) {
-  return this.then(null, onRejected);
-};
-Promise.prototype.then = function (onFulfilled, onRejected) {
-  var onFulfilledFunc = typeof onFulfilled === 'function';
-  var onRejectedFunc = typeof onRejected === 'function';
-  if (typeof onFulfilled !== 'function' && this.state === states.FULFILLED ||
-    typeof onRejected !== 'function' && this.state === states.REJECTED) {
-    return this;
-  }
-  var promise = new Promise(INTERNAL);
-
-  
-  if (this.state !== states.PENDING) {
-    var resolver = this.state === states.FULFILLED ? onFulfilled: onRejected;
-    unwrap(promise, resolver, this.outcome);
-  } else {
-    this.queue.push(new QueueItem(promise, onFulfilled, onRejected));
-  }
-
-  return promise;
-};
-
-},{"./INTERNAL":30,"./queueItem":36,"./resolveThenable":39,"./states":40,"./unwrap":42}],36:[function(require,module,exports){
-arguments[4][10][0].apply(exports,arguments)
-},{"./handlers":33,"./unwrap":42}],37:[function(require,module,exports){
-arguments[4][11][0].apply(exports,arguments)
-},{"./INTERNAL":30,"./handlers":33,"./promise":35}],38:[function(require,module,exports){
-arguments[4][12][0].apply(exports,arguments)
-},{"./INTERNAL":30,"./handlers":33,"./promise":35}],39:[function(require,module,exports){
-arguments[4][13][0].apply(exports,arguments)
-},{"./handlers":33,"./tryCatch":41}],40:[function(require,module,exports){
-module.exports=require(14)
-},{}],41:[function(require,module,exports){
-module.exports=require(15)
-},{}],42:[function(require,module,exports){
-arguments[4][16][0].apply(exports,arguments)
-},{"./handlers":33,"immediate":43}],43:[function(require,module,exports){
-module.exports=require(17)
-},{"./messageChannel":44,"./mutation.js":45,"./nextTick":2,"./stateChange":46,"./timeout":47}],44:[function(require,module,exports){
-module.exports=require(18)
-},{}],45:[function(require,module,exports){
-module.exports=require(19)
-},{}],46:[function(require,module,exports){
-module.exports=require(20)
-},{}],47:[function(require,module,exports){
-module.exports=require(21)
-},{}],48:[function(require,module,exports){
-module.exports=require(23)
-},{}],49:[function(require,module,exports){
+},{"./create-view":26,"./evalfunc":27,"./taskqueue":31,"./utils":33,"pouchdb-collate":29}],29:[function(require,module,exports){
 'use strict';
 
 var MIN_MAGNITUDE = -324; // verified by -Number.MIN_VALUE
@@ -4078,138 +3975,6 @@ exports.toIndexableString = function (key) {
   return collationIndex(key) + SEP + indexify(key) + zero;
 };
 
-function parseNumber(str, i) {
-  var originalIdx = i;
-  var num;
-  var zero = str[i] === '1';
-  if (zero) {
-    num = 0;
-    i++;
-  } else {
-    var neg = str[i] === '0';
-    i++;
-    var numAsString = '';
-    var magAsString = str.substring(i, i + MAGNITUDE_DIGITS);
-    var magnitude = parseInt(magAsString, 10) + MIN_MAGNITUDE;
-    if (neg) {
-      magnitude = -magnitude;
-    }
-    i += MAGNITUDE_DIGITS;
-    while (true) {
-      var ch = str[i];
-      if (ch === '\u0000') {
-        break;
-      } else {
-        numAsString += ch;
-      }
-      i++;
-    }
-    numAsString = numAsString.split('.');
-    if (numAsString.length === 1) {
-      num = parseInt(numAsString, 10);
-    } else {
-      num = parseFloat(numAsString[0] + '.' + numAsString[1]);
-    }
-    if (neg) {
-      num = num - 10;
-    }
-    if (magnitude !== 0) {
-      // parseFloat is more reliable than pow due to rounding errors
-      // e.g. Number.MAX_VALUE would return Infinity if we did
-      // num * Math.pow(10, magnitude);
-      num = parseFloat(num + 'e' + magnitude);
-    }
-  }
-  return {num: num, length : i - originalIdx};
-}
-
-// move up the stack while parsing
-// this function moved outside of parseIndexableString for performance
-function pop(stack, metaStack) {
-  var obj = stack.pop();
-
-  if (metaStack.length) {
-    var lastMetaElement = metaStack[metaStack.length - 1];
-    if (obj === lastMetaElement.element) {
-      // popping a meta-element, e.g. an object whose value is another object
-      metaStack.pop();
-      lastMetaElement = metaStack[metaStack.length - 1];
-    }
-    var element = lastMetaElement.element;
-    var lastElementIndex = lastMetaElement.index;
-    if (Array.isArray(element)) {
-      element.push(obj);
-    } else if (lastElementIndex === stack.length - 2) { // obj with key+value
-      var key = stack.pop();
-      element[key] = obj;
-    } else {
-      stack.push(obj); // obj with key only
-    }
-  }
-}
-
-exports.parseIndexableString = function (str) {
-  var stack = [];
-  var metaStack = []; // stack for arrays and objects
-  var i = 0;
-
-  while (true) {
-    var collationIndex = str[i++];
-    if (collationIndex === '\u0000') {
-      if (stack.length === 1) {
-        return stack.pop();
-      } else {
-        pop(stack, metaStack);
-        continue;
-      }
-    }
-    switch (collationIndex) {
-      case '1':
-        stack.push(null);
-        break;
-      case '2':
-        stack.push(str[i] === '1');
-        i++;
-        break;
-      case '3':
-        var parsedNum = parseNumber(str, i);
-        stack.push(parsedNum.num);
-        i += parsedNum.length;
-        break;
-      case '4':
-        var parsedStr = '';
-        while (true) {
-          var ch = str[i];
-          if (ch === '\u0000') {
-            break;
-          }
-          parsedStr += ch;
-          i++;
-        }
-        // perform the reverse of the order-preserving replacement
-        // algorithm (see above)
-        parsedStr = parsedStr.replace(/\u0001\u0001/g, '\u0000')
-          .replace(/\u0001\u0002/g, '\u0001')
-          .replace(/\u0002\u0002/g, '\u0002');
-        stack.push(parsedStr);
-        break;
-      case '5':
-        var arrayElement = { element: [], index: stack.length };
-        stack.push(arrayElement.element);
-        metaStack.push(arrayElement);
-        break;
-      case '6':
-        var objElement = { element: {}, index: stack.length };
-        stack.push(objElement.element);
-        metaStack.push(objElement);
-        break;
-      default:
-        throw new Error(
-          'bad collationIndex or unexpectedly reached end of input: ' + collationIndex);
-    }
-  }
-};
-
 function arrayCollate(a, b) {
   var len = Math.min(a.length, b.length);
   for (var i = 0; i < len; i++) {
@@ -4311,7 +4076,7 @@ function numToIndexableString(num) {
   return result;
 }
 
-},{"./utils":50}],50:[function(require,module,exports){
+},{"./utils":30}],30:[function(require,module,exports){
 'use strict';
 
 function pad(str, padWith, upToLength) {
@@ -4382,9 +4147,7 @@ exports.intToDecimalForm = function (int) {
 
   return result;
 };
-},{}],51:[function(require,module,exports){
-module.exports=require(24)
-},{}],52:[function(require,module,exports){
+},{}],31:[function(require,module,exports){
 'use strict';
 /*
  * Simple task queue to sequentialize actions. Assumes callbacks will eventually fire (once).
@@ -4409,7 +4172,7 @@ TaskQueue.prototype.finish = function () {
 
 module.exports = TaskQueue;
 
-},{"./utils":54}],53:[function(require,module,exports){
+},{"./utils":33}],32:[function(require,module,exports){
 'use strict';
 var Promise = require('./utils').Promise;
 
@@ -4452,7 +4215,7 @@ function tryAndPut(db, doc, diffFun) {
 
 module.exports = upsert;
 
-},{"./utils":54}],54:[function(require,module,exports){
+},{"./utils":33}],33:[function(require,module,exports){
 var process=require("__browserify_process"),global=typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {};'use strict';
 /* istanbul ignore if */
 if (typeof global.Promise === 'function') {
@@ -4541,7 +4304,7 @@ exports.MD5 = function (string) {
     return md5(string);
   }
 };
-},{"__browserify_process":3,"argsarray":28,"crypto":2,"inherits":29,"lie":34,"md5-jkmyers":48,"pouchdb-extend":51}],55:[function(require,module,exports){
+},{"__browserify_process":4,"argsarray":2,"crypto":3,"inherits":5,"lie":9,"md5-jkmyers":24,"pouchdb-extend":25}],34:[function(require,module,exports){
 "use strict"
 
 function unique_pred(list, compare) {
@@ -4600,7 +4363,7 @@ function unique(list, compare, sorted) {
 
 module.exports = unique
 
-},{}],56:[function(require,module,exports){
+},{}],35:[function(require,module,exports){
 var process=require("__browserify_process"),global=typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {};'use strict';
 
 var Promise;
@@ -4696,5 +4459,5 @@ exports.MD5 = function (string) {
 };
 
 exports.extend = require('pouchdb-extend');
-},{"__browserify_process":3,"crypto":2,"inherits":4,"lie":8,"md5-jkmyers":23,"pouchdb-extend":24}]},{},[1])
+},{"__browserify_process":4,"crypto":3,"inherits":5,"lie":9,"md5-jkmyers":24,"pouchdb-extend":25}]},{},[1])
 ;
