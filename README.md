@@ -31,6 +31,8 @@ The underlying tokenization/stemming/stopword engine is [Lunr][], which is optim
 Usage
 --------
 
+#### In the browser
+
 To use this plugin, include it after `pouchdb.js` in your HTML page:
 
 ```html
@@ -44,7 +46,9 @@ This plugin is also available from Bower:
 bower install pouchdb-quick-search
 ```
 
-Or to use it in Node.js, just npm install it:
+#### In Node.js
+
+Just npm install it:
 
 ```
 npm install pouchdb-quick-search
