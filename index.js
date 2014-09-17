@@ -91,12 +91,70 @@ function createMapFunction(fieldBoosts, index, filter, db) {
   };
 }
 
+//Generate the unique index name for the a set of options
+function genPersistedIndexName(opts) {
+  // the index we save as a separate database is uniquely identified
+  // by the fields the user want to index (boost doesn't matter)
+  // plus the tokenizer
+  var indexParams = {
+    language: opts.language || 'en',
+    fields: Array.isArray(opts.fields) ? opts.fields.sort() : Object.keys(opts.fields).sort()
+  };
+
+  if (opts.filter) {
+    indexParams.filter = opts.filter.toString();
+  }
+  return 'search-' + utils.MD5(JSON.stringify(indexParams));
+}
+
+function toFieldBoosts(fields) {
+  if (Array.isArray(fields)) {
+    var fieldsMap = {};
+    fields.forEach(function (field) {
+      fieldsMap[field] = 1; // default boost
+    });
+    fields = fieldsMap;
+  }
+
+  return Object.keys(fields).map(function (field) {
+    var deepField = field.indexOf('.') !== -1 && field.split('.');
+    return {
+      field: field,
+      deepField: deepField,
+      boost: fields[field]
+    };
+  });
+}
+
+//Search API
 exports.search = utils.toPromise(function (opts, callback) {
-  var pouch = this;
+  if (this.type() === 'http') {
+    var self = this;
+    if (opts.destroy) {
+      return destroyHttpDesignDoc(this, genPersistedIndexName(opts)).then(function (result) {
+        callback(null, result);
+      }, callback);
+    }
+    search(this, opts, function (err, result) {
+      //design doc is missing ?
+      if (err && err.status === 404) {
+        return createHttpDesignDoc(self, genPersistedIndexName(opts), opts.language,
+         toFieldBoosts(opts.fields), opts.filter).then(function () {
+          //try again - with the design doc in place
+          search(self, opts, callback);
+        }, callback);
+      }
+      callback(err, result);
+    });
+  } else {
+    search(this, opts, callback);
+  }
+});
+
+function search(pouch, opts, callback) {
   opts = utils.extend(true, {}, opts);
   var q = opts.query || opts.q;
   var mm = 'mm' in opts ? (parseFloat(opts.mm) / 100) : 1; // e.g. '75%'
-  var fields = opts.fields;
   var highlighting = opts.highlighting;
   var includeDocs = opts.include_docs;
   var destroy = opts.destroy;
@@ -107,22 +165,7 @@ exports.search = utils.toPromise(function (opts, callback) {
   var language = opts.language || 'en';
   var filter = opts.filter;
 
-  if (Array.isArray(fields)) {
-    var fieldsMap = {};
-    fields.forEach(function (field) {
-      fieldsMap[field] = 1; // default boost
-    });
-    fields = fieldsMap;
-  }
-
-  var fieldBoosts = Object.keys(fields).map(function (field) {
-    var deepField = field.indexOf('.') !== -1 && field.split('.');
-    return {
-      field: field,
-      deepField: deepField,
-      boost: fields[field]
-    };
-  });
+  var fieldBoosts = toFieldBoosts(opts.fields);
 
   var index = indexes[language];
   if (!index) {
@@ -132,22 +175,15 @@ exports.search = utils.toPromise(function (opts, callback) {
     }
   }
 
-  // the index we save as a separate database is uniquely identified
-  // by the fields the user want to index (boost doesn't matter)
-  // plus the tokenizer
+  var persistedIndexName = genPersistedIndexName(opts);
 
-  var indexParams =  {
-    language: language,
-    fields: fieldBoosts.map(function (x) { return x.field; }).sort(),
-  };
+  var mapFun;
 
-  if (filter) {
-    indexParams.filter = filter.toString();
+  if (pouch.type() === 'http') {
+    mapFun = persistedIndexName;
+  } else {
+    mapFun = createMapFunction(fieldBoosts, index, filter, pouch);
   }
-
-  var persistedIndexName = 'search-' + utils.MD5(JSON.stringify(indexParams));
-
-  var mapFun = createMapFunction(fieldBoosts, index, filter, pouch);
 
   var queryOpts = {
     saveAs: persistedIndexName
@@ -294,7 +330,7 @@ exports.search = utils.toPromise(function (opts, callback) {
       callback(null, {rows: rows});
     });
   }).catch(callback);
-});
+}
 
 
 // returns a sorted list of scored results, like:
@@ -418,6 +454,178 @@ function isFiltered(doc, filter, db) {
     db.emit('error', e);
     return true;
   }
+}
+
+function genIsFilteredForDesignDoc() {
+  return "function (doc, filter){ \n" +
+  "try {\n" +
+  "  return !!(filter && !filter(doc));\n" +
+  "} catch (e) {\n" +
+  "  return true;\n" +
+  "}\n" +
+  "}";
+}
+
+function genGetTextForDesignDoc() {
+  return "function (fieldBoost, doc) { \n" +
+  "var text; \n" +
+  "if (!fieldBoost.deepField) { \n" +
+  "  text = doc[fieldBoost.field]; \n" +
+  "} else { \n" +
+  "  text = doc; \n" +
+  "  for (var i = 0, len = fieldBoost.deepField.length; i < len; i++) { \n" +
+  "    text = text && text[fieldBoost.deepField[i]]; \n" +
+  "  } \n" +
+  "} \n" +
+  "if (text) { \n" +
+  "  if (Array.isArray(text)) { \n" +
+  "    text = text.join(' '); \n" +
+  "  } else if (typeof text !== 'string') { \n" +
+  "    text = text.toString(); \n" +
+  "  } \n" +
+  "}\n" +
+  "return text;\n" +
+  "}";
+}
+
+//create the design doc, including the libs (lunr.js + helper functions)
+function createHttpDesignDoc(db, name, language, fieldBoosts, filter) {
+
+  //Read the lib files from disk asynchronously
+  return new Promise(function (resolve, reject) {
+    var body = {
+      language: 'javascript',
+      views: {
+        lib: {
+          fieldBoosts: "exports.fieldBoosts = " + JSON.stringify(fieldBoosts),
+          getText: 'exports.getText = ' + genGetTextForDesignDoc(),
+          isFiltered: 'exports.isFiltered = ' + genIsFilteredForDesignDoc(),
+          filter: 'exports.filter = ' + filter
+        }
+      }
+    };
+
+    //libs stored in couchdb_libs folder
+    var libFiles = [{
+      file: __dirname + '/node_modules/lunr/lunr.min.js',
+      saveAs: 'lunr'
+    }];
+    if (language && language !== 'en') {
+      libFiles.push({
+        file: __dirname + '/http_libs/stemmerSupport.js',
+        saveAs: 'stemmerSupport',
+        prefix: 'var lunr = require("./lunr");\n'
+      });
+      libFiles.push({
+        file: __dirname + '/http_libs/lunr-' + language + '.js',
+        saveAs: 'lunr_lang',
+        prefix: 'var lunr = require("./lunr"); ' +
+        'var stemmerSupport = require("./stemmerSupport");\n'
+      });
+      body.views.lib.getTokenStream = "var lunr = require('./lunr'); " +
+      "require('./lunr_lang'); var index = lunr();  index.use(lunr." +
+        language + "); " +
+        "exports.getTokenStream = function(text) { " +
+        "return index.pipeline.run(lunr.tokenizer(text)); }";
+    } else {
+      body.views.lib.getTokenStream =
+        "var lunr = require('views/lib/lunr'); var index = lunr(); " +
+        "exports.getTokenStream = " +
+        "function(text) { return index.pipeline.run(lunr.tokenizer(text)); }";
+    }
+
+    //map function
+    body.views[name] = {
+      map: 'function (doc) {\n' +
+        'var isFiltered = require("views/lib/isFiltered").isFiltered;\n' +
+        'var filter = require("views/lib/filter").filter;\n' +
+        'if (isFiltered(doc, filter)) {\n' +
+        '  return;\n' +
+        '}\n' +
+        'var TYPE_TOKEN_COUNT = "a";\n' +
+        'var TYPE_DOC_INFO = "b";\n' +
+        'var docInfo = [];\n' +
+        'var fieldBoosts = require("views/lib/fieldBoosts").fieldBoosts;\n' +
+        'var getText = require("views/lib/getText").getText;\n' +
+        'var getTokenStream = require("views/lib/getTokenStream").getTokenStream;\n' +
+        'for (var i = 0, len = fieldBoosts.length; i < len; i++) {\n' +
+        '  var fieldBoost = fieldBoosts[i];\n' +
+        '  var text = getText(fieldBoost, doc);\n' +
+        '  var fieldLenNorm;\n' +
+        '  if (text) {\n' +
+        '    var terms = getTokenStream(text);\n' +
+        '    for (var j = 0, jLen = terms.length; j < jLen; j++) {\n' +
+        '      var term = terms[j];\n' +
+        '      var value = fieldBoosts.length > 1 ? i : undefined;\n' +
+        '      emit(TYPE_TOKEN_COUNT + term, value);\n' +
+        '    }\n' +
+        '    fieldLenNorm = Math.sqrt(terms.length);\n' +
+        '  } else { \n' +
+        '    fieldLenNorm = 0;\n' +
+        '  }\n' +
+        '  docInfo.push(fieldLenNorm);\n' +
+        '}\n' +
+        'emit(TYPE_DOC_INFO + doc._id, docInfo);\n' +
+      '}'
+    };
+
+    //read libs from disk
+    readLibFiles(libFiles, function (err, result) {
+      /* istanbul ignore if */
+      if (err) {
+        return reject(err);
+      }
+      for (var lib in result) {
+        //append the file content to the view definition
+        body.views.lib[lib] = result[lib];
+      }
+      resolve(body);
+    });
+  }).then(function (body) {
+    //add the design document
+    return db.request({
+      method: 'PUT',
+      url: '_design/' + name,
+      body: body
+    });
+  });
+}
+
+function destroyHttpDesignDoc(db, name) {
+  var docId = '_design/' + name;
+  return db.get(docId).then(function (doc) {
+    return db.remove(docId, doc._rev);
+  });
+}
+
+//read from disk
+function readLibFiles(files, cb) {
+  var fs = require('fs');
+  /* istanbul ignore if */
+  if (!fs) {
+    return cb({
+      error: "fs is missing"
+    });
+  }
+  var result = {};
+  var iterFiles = function (i) {
+    if (i < files.length) {
+      var fileDesc = files[i];
+      fs.readFile(fileDesc.file, {
+        encoding: 'utf8'
+      }, function (err, content) {
+        /* istanbul ignore if */
+        if (err) {
+          return cb(err);
+        }
+        result[fileDesc.saveAs] = fileDesc.prefix ? fileDesc.prefix + content : content;
+        iterFiles(i + 1);
+      });
+    } else {
+      cb(null, result);
+    }
+  };
+  iterFiles(0);
 }
 
 /* istanbul ignore next */

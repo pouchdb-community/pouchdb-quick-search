@@ -716,7 +716,9 @@ function tests(dbName, dbType) {
         res.rows.length.should.equal(2);
         var ids = res.rows.map(function (x) { return x.id; });
         ids.should.deep.equal(['2', '3']);
-        error.should.have.property('message', 'oups');
+        if (db.type() !== 'http') {
+          error.should.have.property('message', 'oups');
+        }
       });
     });
 

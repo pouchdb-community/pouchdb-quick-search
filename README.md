@@ -78,6 +78,7 @@ API
 * [Deleting the index](#deleting-the-index)
 * [Stale queries](#stale-queries)
 * [Other languages](#other-languages)
+* [Http Adapter](#http-adapter)
 
 
 ### Basic queries
@@ -523,6 +524,24 @@ pouch.search({
 If you don't specify a `language`, then the default is `'en'`. Under the hood, separate external databases will be created per language (and per `fields` definition), so you may want to keep that in mind if you're using the `destroy` and `build` options.
 
 **Note:** currently the lunr-languages plugin expects a global `lunr` object, so unfortunately you will have to include lunr as an extra dependency in your project and assign it to global (as described in the lunr-languages instructions).  Hopefully this will be fixed in the future.
+
+### Http Adapter
+
+When running on Node.js, it is possible to use the alternative `http` Pouchdb adapter. A design document is created behind the scene with a map function to build the search index, all in the Couchdb Runtime. It free node.js from the indexing work leading to better performance if you already have a Couchdb server to store your documents.
+
+```js
+//Create a Http Pouch
+var pouch = new PouchDB('http://localhost:5984/mydb');
+//search normally
+pouch.search({
+  query: 'donkey kong',
+  fields: ['title', 'text']
+});
+```
+
+**Note:**  Other language support file for `lunr` should be included in the `http_libs` folder.  For example, the french support file is `lunr-fr.js`.
+
+**Warning:**  There are better and more mature solutions for server-side fulltext index such as [Couchdb-Lucene](https://github.com/rnewson/couchdb-lucene).
 
 Algorithm
 ----
