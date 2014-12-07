@@ -24,9 +24,9 @@ A very efficient and accurate full-text search engine built on top of PouchDB. A
 
 This is a local plugin, so it is not designed to work against CouchDB/Cloudant/etc.  If you'd like to search against the server, use the [CouchDB Lucene plugin](https://github.com/rnewson/couchdb-lucene), [Cloudant's search indexes](https://cloudant.com/for-developers/search/), or something similar.
 
-If you need prefix search (e.g. for autocompletion), then just use PouchDB itself.  The `allDocs()` and `query()` APIs plus `startkey` should give you everything you need for prefix lookup.
+If you need prefix search (e.g. for autocompletion), then just use PouchDB itself.  The `allDocs()` and `query()` APIs plus `startkey` should give you everything you need for prefix lookup. See the [autosuggestions and prefix search](#autosuggestions-and-prefix-search) section for details.
 
-The underlying tokenization/stemming/stopword engine is [Lunr][], which is optimized for English text, using a variant of the [Porter stemmer](http://tartarus.org/~martin/PorterStemmer/index.html). To optimize for other languages, check out [lunr-languages](https://github.com/MihaiValentin/lunr-languages) and see instructions below for the `language` option.
+The underlying tokenization/stemming/stopword engine is [Lunr][], which is optimized for English text, using a variant of the [Porter stemmer](http://tartarus.org/~martin/PorterStemmer/index.html). To optimize for other languages, check out [lunr-languages](https://github.com/MihaiValentin/lunr-languages) and see the ["other languages"](#other-languages) section.
 
 Usage
 --------
@@ -78,6 +78,7 @@ API
 * [Deleting the index](#deleting-the-index)
 * [Stale queries](#stale-queries)
 * [Other languages](#other-languages)
+* [Autosuggestions and prefix search](#autosuggestions-and-prefix-search)
 
 
 ### Basic queries
@@ -523,6 +524,34 @@ pouch.search({
 If you don't specify a `language`, then the default is `'en'`. Under the hood, separate external databases will be created per language (and per `fields` definition), so you may want to keep that in mind if you're using the `destroy` and `build` options.
 
 **Note:** currently the lunr-languages plugin expects a global `lunr` object, so unfortunately you will have to include lunr as an extra dependency in your project and assign it to global (as described in the lunr-languages instructions).  Hopefully this will be fixed in the future.
+
+### Autosuggestions and prefix search
+
+While the `pouchdb-quick-search` plugin does not provide prefix/autosuggestion support, you can trivially do it in PouchDB itself by using `allDocs()`.
+
+Just create documents with IDs equal to what you want to search for, and then use `startkey`/`endkey` plus the special high unicode character `\uffff` to search:
+
+```js
+pouch.bulkDocs([
+  {_id: 'marin'}, 
+  {_id: 'mario'},
+  {_id: 'marth'},
+  {_id: 'mushroom'},
+  {_id: 'zelda'}
+]).then(function () {
+  return pouch.allDocs({
+    startkey: 'mar',
+    endkey: 'mar\uffff'
+  });
+});
+```
+
+This will return all documents that start with `'mar'`, which in this case would be `'marin'`, `'mario'`, and `'marth'`.
+
+How does it work? Well, in PouchDB and CouchDB, doc IDs are [sorted lexiocographically](http://docs.couchdb.org/en/latest/couchapp/views/collation.html), hence the `\uffff` trick.
+
+Note that to handle uppercase/lowercase, you would have to insert the documents with the `_id`s already lowercase, and then search using lowercase letters as well.
+
 
 Algorithm
 ----
