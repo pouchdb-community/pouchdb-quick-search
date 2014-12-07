@@ -377,8 +377,8 @@ function applyIncludeDocs(pouch, rows) {
 function applyHighlighting(pouch, opts, rows, fieldBoosts,
                            docIdsToFieldsToQueryTerms) {
 
-  var pre = opts.highlighting_pre || '<strong>';
-  var post = opts.highlighting_post || '</strong>';
+  var pre = typeof opts.highlighting_pre == 'string' ? highlighting_pre : '<strong>';
+  var post = typeof opts.highlighting_post == 'string' ? highlighting_post : '</strong>';
 
   return Promise.all(rows.map(function (row) {
 
