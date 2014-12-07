@@ -1,9 +1,8 @@
 'use strict';
 
-// TODO: temporary hack that may go away
-// later when map/reduce is broken out
-// into persistence + map/reduce
-var mapReduce = require('pouchdb-mapreduce');
+// Use a fork of pouchdb-mapreduce, which allows us
+// deeper control over what's persisted, without needing ddocs
+var mapReduce = require('pouchdb-mapreduce-no-ddocs');
 Object.keys(mapReduce).forEach(function (key) {
   exports[key] = mapReduce[key];
 });
@@ -138,7 +137,7 @@ exports.search = utils.toPromise(function (opts, callback) {
 
   var indexParams =  {
     language: language,
-    fields: fieldBoosts.map(function (x) { return x.field; }).sort(),
+    fields: fieldBoosts.map(function (x) { return x.field; }).sort()
   };
 
   if (filter) {
