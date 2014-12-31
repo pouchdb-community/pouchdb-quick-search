@@ -20,6 +20,8 @@ pouch.put(doc).then(function () {
 });
 ```
 
+([Live demo](http://bl.ocks.org/nolanlawson/5d326f3692bc65cf89fd))
+
 A very efficient and accurate full-text search engine built on top of PouchDB. Analyzes text, indexes it, and provides a simple but powerful API for querying. Ideal for PhoneGap apps or any webapp that needs offline search support.
 
 This is a local plugin, so it is not designed to work against CouchDB/Cloudant/etc.  If you'd like to search against the server, use the [CouchDB Lucene plugin](https://github.com/rnewson/couchdb-lucene), [Cloudant's search indexes](https://cloudant.com/for-developers/search/), or something similar.
