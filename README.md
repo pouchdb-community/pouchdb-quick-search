@@ -554,6 +554,7 @@ How does it work? Well, in PouchDB and CouchDB, doc IDs are [sorted lexiocograph
 
 Note that to handle uppercase/lowercase, you would have to insert the documents with the `_id`s already lowercase, and then search using lowercase letters as well.
 
+**Note:** You can also accomplish this using [map/reduce queries](http://pouchdb.com/guides/queries.html), and the principle is the same (including the `\uffff` trick). However, the performance may be worse than `allDocs()` because you are using a secondary index rather than the primary index.
 
 Algorithm
 ----
