@@ -609,3 +609,4 @@ You can run e.g.
 This will run the tests automatically and the process will exit with a 0 or a 1 when it's done. Firefox uses IndexedDB, and PhantomJS uses WebSQL.
 
 [lunr]: https://github.com/olivernn/lunr.js
+
