@@ -1,12 +1,12 @@
 {
   "name": "pouchdb-quick-search",
+  "version": "1.0.2",
+  "description": "PouchDB Quick Search - persisted full-text search for PouchDB",
   "main": "dist/pouchdb.quick-search.js",
-  "version": "1.0.1",
   "homepage": "https://github.com/nolanlawson/pouchdb-quick-search",
   "authors": [
     "Nolan Lawson <nolan.lawson@gmail.com>"
   ],
-  "description": "PouchDB Quick Search - persisted full-text search for PouchDB",
   "moduleType": [
     "node"
   ],
