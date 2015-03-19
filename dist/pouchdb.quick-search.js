@@ -169,7 +169,7 @@ exports.search = utils.toPromise(function (opts, callback) {
   // special cases like boingo boingo and mother mother are rare
   var queryTerms = uniq(getTokenStream(q, index));
   if (!queryTerms.length) {
-    return callback(null, {rows: []});
+    return callback(null, {total_rows: 0, rows: []});
   }
   queryOpts.keys = queryTerms.map(function (queryTerm) {
     return TYPE_TOKEN_COUNT + queryTerm;
@@ -198,9 +198,9 @@ exports.search = utils.toPromise(function (opts, callback) {
   pouch._search_query(mapFun, queryOpts).then(function (res) {
 
     if (!res.rows.length) {
-      return callback(null, {rows: []});
+      return callback(null, {total_rows: 0, rows: []});
     }
-
+    var total_rows = 0;
     var docIdsToFieldsToQueryTerms = {};
     var termDFs = {};
 
@@ -250,7 +250,7 @@ exports.search = utils.toPromise(function (opts, callback) {
     }
 
     if (!Object.keys(docIdsToFieldsToQueryTerms).length) {
-      return callback(null, {rows: []});
+      return callback(null, {total_rows: 0, rows: []});
     }
 
     var keys = Object.keys(docIdsToFieldsToQueryTerms).map(function (docId) {
@@ -275,6 +275,7 @@ exports.search = utils.toPromise(function (opts, callback) {
         docIdsToFieldsToQueryTerms, docIdsToFieldsToNorms, fieldBoosts);
       return rows;
     }).then(function (rows) {
+      total_rows = rows.length;
       // filter before fetching docs or applying highlighting
       // for a slight optimization, since for now we've only fetched ids/scores
       return (typeof limit === 'number' && limit >= 0) ?
@@ -291,7 +292,7 @@ exports.search = utils.toPromise(function (opts, callback) {
       return rows;
 
     }).then(function (rows) {
-      callback(null, {rows: rows});
+      callback(null, {total_rows: total_rows, rows: rows});
     });
   })["catch"](callback);
 });
@@ -4492,12 +4493,21 @@ function upsertInner(db, docId, diffFun) {
         }
         doc = {};
       }
+
+      // the user might change the _rev, so save it for posterity
+      var docRev = doc._rev;
       var newDoc = diffFun(doc);
+
       if (!newDoc) {
-        return fulfill({updated: false, rev: doc._rev});
+        // if the diffFun returns falsy, we short-circuit as
+        // an optimization
+        return fulfill({updated: false, rev: docRev});
       }
+
+      // users aren't allowed to modify these values,
+      // so reset them here
       newDoc._id = docId;
-      newDoc._rev = doc._rev;
+      newDoc._rev = docRev;
       fulfill(tryAndPut(db, newDoc, diffFun));
     });
   });

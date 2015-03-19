@@ -43,6 +43,7 @@ var docs4 = require('./docs/test-docs-4');
 var docs5 = require('./docs/test-docs-5');
 var docs6 = require('./docs/test-docs-6');
 var docs7 = require('./docs/test-docs-7');
+var docs8 = require('./docs/test-docs-8');
 
 function tests(dbName, dbType) {
 
@@ -53,7 +54,7 @@ function tests(dbName, dbType) {
     return db;
   });
   afterEach(function () {
-    return Pouch.destroy(dbName);
+    return db.destroy();
   });
   describe(dbType + ': search test suite', function () {
     this.timeout(30000);
@@ -718,6 +719,34 @@ function tests(dbName, dbType) {
         ids.should.deep.equal(['2', '3']);
         error.should.have.property('message', 'oups');
       });
+    });
+
+    it('total_rows', function () {
+
+      return db.bulkDocs({docs: docs8}).then(function () {
+          var opts = {
+              fields: ['category'],
+              query: 'PL'
+            };
+          return db.search(opts);
+        }).then(function (res) {
+          res.total_rows.should.equal(3);
+        });
+    });
+
+    it('total_rows with filter and limit', function () {
+
+      return db.bulkDocs({docs: docs8}).then(function () {
+          var opts = {
+              fields: ['category'],
+              query: 'PL',
+              limit: 1,
+              filter: function (doc) { return doc.type !== "static"; }
+            };
+          return db.search(opts);
+        }).then(function (res) {
+          res.total_rows.should.equal(2);
+        });
     });
 
   });
