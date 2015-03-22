@@ -104,7 +104,8 @@ pouch.search({
      { id: 'mydoc5', score: 0.08027856564851082 },
      { id: 'mydoc3', score: 0.044194173824159216 },
      { id: 'mydoc4', score: 0.044194173824159216 }
-   ] 
+   ],
+  total_rows: 3
 }
 ```
 
@@ -152,15 +153,14 @@ pouch.put(doc).then(function () {
 **Response:**
 
 ```js
-{
-  "result" : { 
-    "rows": [ 
-      { 
-        "id": "mydoc", 
-        "score": 0.044194173824159216 
-      } 
-    ] 
-  }
+{ 
+  "rows": [ 
+    { 
+      "id": "mydoc", 
+      "score": 0.044194173824159216 
+    } 
+  ],
+  "total_rows": 1 
 }
 ```
 
@@ -211,7 +211,8 @@ pouch.search({
             "id": "mydoc4",
             "score": 0.044194173824159216
         }
-    ]
+    ],
+   "total_rows": 3
 }
 ```
 
@@ -254,7 +255,8 @@ pouch.search({
             "id": "mydoc4",
             "score": 0.044194173824159216
         }
-    ]
+    ],
+    "total_rows": 3
 }
 ```
 
@@ -297,7 +299,8 @@ pouch.search({
             "id": "mydoc4",
             "score": 0.044194173824159216
         }
-    ]
+    ],
+    "total_rows": 3
 }
 ```
 
@@ -317,6 +320,10 @@ pouch.search({
 The performance concerns for `skip` that apply to `allDocs()`/`query()` do not apply so much here, because no matter what, we have to read in all the doc IDs and calculate their score in order to sort them correctly. In other words, it is guaranteed that you will read the doc IDs of all matching documents into memory, no matter what values you set for `limit` and `skip`.
 
 What this will optimize, however, is the attachment of metadata like `doc` and `highlighting` &ndash; it will only be done for the subset of results that you want.
+
+##### `total_rows`
+
+You will also get back a field, `total_rows`, which tells you how many documents you would have gotten from your query if you hadn't applied `limit`/`skip`. You can use this for a "how many pages are remaining" display during pagination.
 
 
 ### Boosting fields
@@ -491,7 +498,8 @@ pouch.search({
        "id": "french-doc",
        "score": 0.7071067811865475
     }
-  ]
+  ],
+  "total_rows": 1
 }
 ```
 
@@ -519,7 +527,8 @@ pouch.search({
       "id": "english-doc",
       "score": 1
     }
-  ]
+  ],
+  "total_rows": 1
 }
 ```
 
