@@ -258,7 +258,8 @@ exports.search = utils.toPromise(function (opts, callback) {
 
     var queryOpts = {
       saveAs: persistedIndexName,
-      keys: keys
+      keys: keys,
+      stale: stale
     };
 
     // step 2
