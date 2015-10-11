@@ -427,7 +427,7 @@ if (typeof window !== 'undefined' && window.PouchDB) {
   window.PouchDB.plugin(exports);
 }
 
-},{"./pouch-utils":34,"lunr":20,"pouchdb-mapreduce-no-ddocs":25,"uniq":33}],2:[function(require,module,exports){
+},{"./pouch-utils":34,"lunr":19,"pouchdb-mapreduce-no-ddocs":26,"uniq":33}],2:[function(require,module,exports){
 'use strict';
 
 module.exports = argsArray;
@@ -450,59 +450,75 @@ function argsArray(fun) {
 },{}],3:[function(require,module,exports){
 
 },{}],4:[function(require,module,exports){
-// shim for using process in browser
+var global=typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {};'use strict';
+var Mutation = global.MutationObserver || global.WebKitMutationObserver;
 
-var process = module.exports = {};
+var scheduleDrain;
 
-process.nextTick = (function () {
-    var canSetImmediate = typeof window !== 'undefined'
-    && window.setImmediate;
-    var canPost = typeof window !== 'undefined'
-    && window.postMessage && window.addEventListener
-    ;
-
-    if (canSetImmediate) {
-        return function (f) { return window.setImmediate(f) };
-    }
-
-    if (canPost) {
-        var queue = [];
-        window.addEventListener('message', function (ev) {
-            var source = ev.source;
-            if ((source === window || source === null) && ev.data === 'process-tick') {
-                ev.stopPropagation();
-                if (queue.length > 0) {
-                    var fn = queue.shift();
-                    fn();
-                }
-            }
-        }, true);
-
-        return function nextTick(fn) {
-            queue.push(fn);
-            window.postMessage('process-tick', '*');
-        };
-    }
-
-    return function nextTick(fn) {
-        setTimeout(fn, 0);
+{
+  if (Mutation) {
+    var called = 0;
+    var observer = new Mutation(nextTick);
+    var element = global.document.createTextNode('');
+    observer.observe(element, {
+      characterData: true
+    });
+    scheduleDrain = function () {
+      element.data = (called = ++called % 2);
     };
-})();
+  } else if (!global.setImmediate && typeof global.MessageChannel !== 'undefined') {
+    var channel = new global.MessageChannel();
+    channel.port1.onmessage = nextTick;
+    scheduleDrain = function () {
+      channel.port2.postMessage(0);
+    };
+  } else if ('document' in global && 'onreadystatechange' in global.document.createElement('script')) {
+    scheduleDrain = function () {
 
-process.title = 'browser';
-process.browser = true;
-process.env = {};
-process.argv = [];
+      // Create a <script> element; its readystatechange event will be fired asynchronously once it is inserted
+      // into the document. Do so, thus queuing up the task. Remember to clean up once it's been called.
+      var scriptEl = global.document.createElement('script');
+      scriptEl.onreadystatechange = function () {
+        nextTick();
 
-process.binding = function (name) {
-    throw new Error('process.binding is not supported');
+        scriptEl.onreadystatechange = null;
+        scriptEl.parentNode.removeChild(scriptEl);
+        scriptEl = null;
+      };
+      global.document.documentElement.appendChild(scriptEl);
+    };
+  } else {
+    scheduleDrain = function () {
+      setTimeout(nextTick, 0);
+    };
+  }
 }
 
-// TODO(shtylman)
-process.cwd = function () { return '/' };
-process.chdir = function (dir) {
-    throw new Error('process.chdir is not supported');
-};
+var draining;
+var queue = [];
+//named nextTick for less confusing stack traces
+function nextTick() {
+  draining = true;
+  var i, oldQueue;
+  var len = queue.length;
+  while (len) {
+    oldQueue = queue;
+    queue = [];
+    i = -1;
+    while (++i < len) {
+      oldQueue[i]();
+    }
+    len = queue.length;
+  }
+  draining = false;
+}
+
+module.exports = immediate;
+function immediate(task) {
+  if (queue.push(task) === 1 && !draining) {
+    scheduleDrain();
+  }
+}
 
 },{}],5:[function(require,module,exports){
 if (typeof Object.create === 'function') {
@@ -874,78 +890,7 @@ function unwrap(promise, func, value) {
     }
   });
 }
-},{"./handlers":8,"immediate":19}],19:[function(require,module,exports){
-var global=typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {};'use strict';
-var Mutation = global.MutationObserver || global.WebKitMutationObserver;
-
-var scheduleDrain;
-
-{
-  if (Mutation) {
-    var called = 0;
-    var observer = new Mutation(nextTick);
-    var element = global.document.createTextNode('');
-    observer.observe(element, {
-      characterData: true
-    });
-    scheduleDrain = function () {
-      element.data = (called = ++called % 2);
-    };
-  } else if (!global.setImmediate && typeof global.MessageChannel !== 'undefined') {
-    var channel = new global.MessageChannel();
-    channel.port1.onmessage = nextTick;
-    scheduleDrain = function () {
-      channel.port2.postMessage(0);
-    };
-  } else if ('document' in global && 'onreadystatechange' in global.document.createElement('script')) {
-    scheduleDrain = function () {
-
-      // Create a <script> element; its readystatechange event will be fired asynchronously once it is inserted
-      // into the document. Do so, thus queuing up the task. Remember to clean up once it's been called.
-      var scriptEl = global.document.createElement('script');
-      scriptEl.onreadystatechange = function () {
-        nextTick();
-
-        scriptEl.onreadystatechange = null;
-        scriptEl.parentNode.removeChild(scriptEl);
-        scriptEl = null;
-      };
-      global.document.documentElement.appendChild(scriptEl);
-    };
-  } else {
-    scheduleDrain = function () {
-      setTimeout(nextTick, 0);
-    };
-  }
-}
-
-var draining;
-var queue = [];
-//named nextTick for less confusing stack traces
-function nextTick() {
-  draining = true;
-  var i, oldQueue;
-  var len = queue.length;
-  while (len) {
-    oldQueue = queue;
-    queue = [];
-    i = -1;
-    while (++i < len) {
-      oldQueue[i]();
-    }
-    len = queue.length;
-  }
-  draining = false;
-}
-
-module.exports = immediate;
-function immediate(task) {
-  if (queue.push(task) === 1 && !draining) {
-    scheduleDrain();
-  }
-}
-
-},{}],20:[function(require,module,exports){
+},{"./handlers":8,"immediate":4}],19:[function(require,module,exports){
 /**
  * lunr - http://lunrjs.com - A bit like Solr, but much smaller and not as bright - 0.5.5
  * Copyright (C) 2014 Oliver Nightingale
@@ -2829,9 +2774,435 @@ lunr.TokenStore.prototype.toJSON = function () {
   }))
 })()
 
-},{}],21:[function(require,module,exports){
+},{}],20:[function(require,module,exports){
 !function(a,b){"function"==typeof define&&define.amd?define(b):"object"==typeof exports?module.exports=b():a.md5=b()}(this,function(){function a(a,b){var g=a[0],h=a[1],i=a[2],j=a[3];g=c(g,h,i,j,b[0],7,-680876936),j=c(j,g,h,i,b[1],12,-389564586),i=c(i,j,g,h,b[2],17,606105819),h=c(h,i,j,g,b[3],22,-1044525330),g=c(g,h,i,j,b[4],7,-176418897),j=c(j,g,h,i,b[5],12,1200080426),i=c(i,j,g,h,b[6],17,-1473231341),h=c(h,i,j,g,b[7],22,-45705983),g=c(g,h,i,j,b[8],7,1770035416),j=c(j,g,h,i,b[9],12,-1958414417),i=c(i,j,g,h,b[10],17,-42063),h=c(h,i,j,g,b[11],22,-1990404162),g=c(g,h,i,j,b[12],7,1804603682),j=c(j,g,h,i,b[13],12,-40341101),i=c(i,j,g,h,b[14],17,-1502002290),h=c(h,i,j,g,b[15],22,1236535329),g=d(g,h,i,j,b[1],5,-165796510),j=d(j,g,h,i,b[6],9,-1069501632),i=d(i,j,g,h,b[11],14,643717713),h=d(h,i,j,g,b[0],20,-373897302),g=d(g,h,i,j,b[5],5,-701558691),j=d(j,g,h,i,b[10],9,38016083),i=d(i,j,g,h,b[15],14,-660478335),h=d(h,i,j,g,b[4],20,-405537848),g=d(g,h,i,j,b[9],5,568446438),j=d(j,g,h,i,b[14],9,-1019803690),i=d(i,j,g,h,b[3],14,-187363961),h=d(h,i,j,g,b[8],20,1163531501),g=d(g,h,i,j,b[13],5,-1444681467),j=d(j,g,h,i,b[2],9,-51403784),i=d(i,j,g,h,b[7],14,1735328473),h=d(h,i,j,g,b[12],20,-1926607734),g=e(g,h,i,j,b[5],4,-378558),j=e(j,g,h,i,b[8],11,-2022574463),i=e(i,j,g,h,b[11],16,1839030562),h=e(h,i,j,g,b[14],23,-35309556),g=e(g,h,i,j,b[1],4,-1530992060),j=e(j,g,h,i,b[4],11,1272893353),i=e(i,j,g,h,b[7],16,-155497632),h=e(h,i,j,g,b[10],23,-1094730640),g=e(g,h,i,j,b[13],4,681279174),j=e(j,g,h,i,b[0],11,-358537222),i=e(i,j,g,h,b[3],16,-722521979),h=e(h,i,j,g,b[6],23,76029189),g=e(g,h,i,j,b[9],4,-640364487),j=e(j,g,h,i,b[12],11,-421815835),i=e(i,j,g,h,b[15],16,530742520),h=e(h,i,j,g,b[2],23,-995338651),g=f(g,h,i,j,b[0],6,-198630844),j=f(j,g,h,i,b[7],10,1126891415),i=f(i,j,g,h,b[14],15,-1416354905),h=f(h,i,j,g,b[5],21,-57434055),g=f(g,h,i,j,b[12],6,1700485571),j=f(j,g,h,i,b[3],10,-1894986606),i=f(i,j,g,h,b[10],15,-1051523),h=f(h,i,j,g,b[1],21,-2054922799),g=f(g,h,i,j,b[8],6,1873313359),j=f(j,g,h,i,b[15],10,-30611744),i=f(i,j,g,h,b[6],15,-1560198380),h=f(h,i,j,g,b[13],21,1309151649),g=f(g,h,i,j,b[4],6,-145523070),j=f(j,g,h,i,b[11],10,-1120210379),i=f(i,j,g,h,b[2],15,718787259),h=f(h,i,j,g,b[9],21,-343485551),a[0]=l(g,a[0]),a[1]=l(h,a[1]),a[2]=l(i,a[2]),a[3]=l(j,a[3])}function b(a,b,c,d,e,f){return b=l(l(b,a),l(d,f)),l(b<<e|b>>>32-e,c)}function c(a,c,d,e,f,g,h){return b(c&d|~c&e,a,c,f,g,h)}function d(a,c,d,e,f,g,h){return b(c&e|d&~e,a,c,f,g,h)}function e(a,c,d,e,f,g,h){return b(c^d^e,a,c,f,g,h)}function f(a,c,d,e,f,g,h){return b(d^(c|~e),a,c,f,g,h)}function g(b){txt="";var c,d=b.length,e=[1732584193,-271733879,-1732584194,271733878];for(c=64;c<=b.length;c+=64)a(e,h(b.substring(c-64,c)));b=b.substring(c-64);var f=[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];for(c=0;c<b.length;c++)f[c>>2]|=b.charCodeAt(c)<<(c%4<<3);if(f[c>>2]|=128<<(c%4<<3),c>55)for(a(e,f),c=0;16>c;c++)f[c]=0;return f[14]=8*d,a(e,f),e}function h(a){var b,c=[];for(b=0;64>b;b+=4)c[b>>2]=a.charCodeAt(b)+(a.charCodeAt(b+1)<<8)+(a.charCodeAt(b+2)<<16)+(a.charCodeAt(b+3)<<24);return c}function i(a){for(var b="",c=0;4>c;c++)b+=m[a>>8*c+4&15]+m[a>>8*c&15];return b}function j(a){for(var b=0;b<a.length;b++)a[b]=i(a[b]);return a.join("")}function k(a){return j(g(a))}function l(a,b){return a+b&4294967295}function l(a,b){var c=(65535&a)+(65535&b),d=(a>>16)+(b>>16)+(c>>16);return d<<16|65535&c}var m="0123456789abcdef".split("");return"5d41402abc4b2a76b9719d911017c592"!=k("hello"),k});
-},{}],22:[function(require,module,exports){
+},{}],21:[function(require,module,exports){
+'use strict';
+
+var MIN_MAGNITUDE = -324; // verified by -Number.MIN_VALUE
+var MAGNITUDE_DIGITS = 3; // ditto
+var SEP = ''; // set to '_' for easier debugging 
+
+var utils = require('./utils');
+
+exports.collate = function (a, b) {
+
+  if (a === b) {
+    return 0;
+  }
+
+  a = exports.normalizeKey(a);
+  b = exports.normalizeKey(b);
+
+  var ai = collationIndex(a);
+  var bi = collationIndex(b);
+  if ((ai - bi) !== 0) {
+    return ai - bi;
+  }
+  if (a === null) {
+    return 0;
+  }
+  switch (typeof a) {
+    case 'number':
+      return a - b;
+    case 'boolean':
+      return a === b ? 0 : (a < b ? -1 : 1);
+    case 'string':
+      return stringCollate(a, b);
+  }
+  return Array.isArray(a) ? arrayCollate(a, b) : objectCollate(a, b);
+};
+
+// couch considers null/NaN/Infinity/-Infinity === undefined,
+// for the purposes of mapreduce indexes. also, dates get stringified.
+exports.normalizeKey = function (key) {
+  switch (typeof key) {
+    case 'undefined':
+      return null;
+    case 'number':
+      if (key === Infinity || key === -Infinity || isNaN(key)) {
+        return null;
+      }
+      return key;
+    case 'object':
+      var origKey = key;
+      if (Array.isArray(key)) {
+        var len = key.length;
+        key = new Array(len);
+        for (var i = 0; i < len; i++) {
+          key[i] = exports.normalizeKey(origKey[i]);
+        }
+      } else if (key instanceof Date) {
+        return key.toJSON();
+      } else if (key !== null) { // generic object
+        key = {};
+        for (var k in origKey) {
+          if (origKey.hasOwnProperty(k)) {
+            var val = origKey[k];
+            if (typeof val !== 'undefined') {
+              key[k] = exports.normalizeKey(val);
+            }
+          }
+        }
+      }
+  }
+  return key;
+};
+
+function indexify(key) {
+  if (key !== null) {
+    switch (typeof key) {
+      case 'boolean':
+        return key ? 1 : 0;
+      case 'number':
+        return numToIndexableString(key);
+      case 'string':
+        // We've to be sure that key does not contain \u0000
+        // Do order-preserving replacements:
+        // 0 -> 1, 1
+        // 1 -> 1, 2
+        // 2 -> 2, 2
+        return key
+          .replace(/\u0002/g, '\u0002\u0002')
+          .replace(/\u0001/g, '\u0001\u0002')
+          .replace(/\u0000/g, '\u0001\u0001');
+      case 'object':
+        var isArray = Array.isArray(key);
+        var arr = isArray ? key : Object.keys(key);
+        var i = -1;
+        var len = arr.length;
+        var result = '';
+        if (isArray) {
+          while (++i < len) {
+            result += exports.toIndexableString(arr[i]);
+          }
+        } else {
+          while (++i < len) {
+            var objKey = arr[i];
+            result += exports.toIndexableString(objKey) +
+                exports.toIndexableString(key[objKey]);
+          }
+        }
+        return result;
+    }
+  }
+  return '';
+}
+
+// convert the given key to a string that would be appropriate
+// for lexical sorting, e.g. within a database, where the
+// sorting is the same given by the collate() function.
+exports.toIndexableString = function (key) {
+  var zero = '\u0000';
+  key = exports.normalizeKey(key);
+  return collationIndex(key) + SEP + indexify(key) + zero;
+};
+
+function parseNumber(str, i) {
+  var originalIdx = i;
+  var num;
+  var zero = str[i] === '1';
+  if (zero) {
+    num = 0;
+    i++;
+  } else {
+    var neg = str[i] === '0';
+    i++;
+    var numAsString = '';
+    var magAsString = str.substring(i, i + MAGNITUDE_DIGITS);
+    var magnitude = parseInt(magAsString, 10) + MIN_MAGNITUDE;
+    if (neg) {
+      magnitude = -magnitude;
+    }
+    i += MAGNITUDE_DIGITS;
+    while (true) {
+      var ch = str[i];
+      if (ch === '\u0000') {
+        break;
+      } else {
+        numAsString += ch;
+      }
+      i++;
+    }
+    numAsString = numAsString.split('.');
+    if (numAsString.length === 1) {
+      num = parseInt(numAsString, 10);
+    } else {
+      num = parseFloat(numAsString[0] + '.' + numAsString[1]);
+    }
+    if (neg) {
+      num = num - 10;
+    }
+    if (magnitude !== 0) {
+      // parseFloat is more reliable than pow due to rounding errors
+      // e.g. Number.MAX_VALUE would return Infinity if we did
+      // num * Math.pow(10, magnitude);
+      num = parseFloat(num + 'e' + magnitude);
+    }
+  }
+  return {num: num, length : i - originalIdx};
+}
+
+// move up the stack while parsing
+// this function moved outside of parseIndexableString for performance
+function pop(stack, metaStack) {
+  var obj = stack.pop();
+
+  if (metaStack.length) {
+    var lastMetaElement = metaStack[metaStack.length - 1];
+    if (obj === lastMetaElement.element) {
+      // popping a meta-element, e.g. an object whose value is another object
+      metaStack.pop();
+      lastMetaElement = metaStack[metaStack.length - 1];
+    }
+    var element = lastMetaElement.element;
+    var lastElementIndex = lastMetaElement.index;
+    if (Array.isArray(element)) {
+      element.push(obj);
+    } else if (lastElementIndex === stack.length - 2) { // obj with key+value
+      var key = stack.pop();
+      element[key] = obj;
+    } else {
+      stack.push(obj); // obj with key only
+    }
+  }
+}
+
+exports.parseIndexableString = function (str) {
+  var stack = [];
+  var metaStack = []; // stack for arrays and objects
+  var i = 0;
+
+  while (true) {
+    var collationIndex = str[i++];
+    if (collationIndex === '\u0000') {
+      if (stack.length === 1) {
+        return stack.pop();
+      } else {
+        pop(stack, metaStack);
+        continue;
+      }
+    }
+    switch (collationIndex) {
+      case '1':
+        stack.push(null);
+        break;
+      case '2':
+        stack.push(str[i] === '1');
+        i++;
+        break;
+      case '3':
+        var parsedNum = parseNumber(str, i);
+        stack.push(parsedNum.num);
+        i += parsedNum.length;
+        break;
+      case '4':
+        var parsedStr = '';
+        while (true) {
+          var ch = str[i];
+          if (ch === '\u0000') {
+            break;
+          }
+          parsedStr += ch;
+          i++;
+        }
+        // perform the reverse of the order-preserving replacement
+        // algorithm (see above)
+        parsedStr = parsedStr.replace(/\u0001\u0001/g, '\u0000')
+          .replace(/\u0001\u0002/g, '\u0001')
+          .replace(/\u0002\u0002/g, '\u0002');
+        stack.push(parsedStr);
+        break;
+      case '5':
+        var arrayElement = { element: [], index: stack.length };
+        stack.push(arrayElement.element);
+        metaStack.push(arrayElement);
+        break;
+      case '6':
+        var objElement = { element: {}, index: stack.length };
+        stack.push(objElement.element);
+        metaStack.push(objElement);
+        break;
+      default:
+        throw new Error(
+          'bad collationIndex or unexpectedly reached end of input: ' + collationIndex);
+    }
+  }
+};
+
+function arrayCollate(a, b) {
+  var len = Math.min(a.length, b.length);
+  for (var i = 0; i < len; i++) {
+    var sort = exports.collate(a[i], b[i]);
+    if (sort !== 0) {
+      return sort;
+    }
+  }
+  return (a.length === b.length) ? 0 :
+    (a.length > b.length) ? 1 : -1;
+}
+function stringCollate(a, b) {
+  // See: https://github.com/daleharvey/pouchdb/issues/40
+  // This is incompatible with the CouchDB implementation, but its the
+  // best we can do for now
+  return (a === b) ? 0 : ((a > b) ? 1 : -1);
+}
+function objectCollate(a, b) {
+  var ak = Object.keys(a), bk = Object.keys(b);
+  var len = Math.min(ak.length, bk.length);
+  for (var i = 0; i < len; i++) {
+    // First sort the keys
+    var sort = exports.collate(ak[i], bk[i]);
+    if (sort !== 0) {
+      return sort;
+    }
+    // if the keys are equal sort the values
+    sort = exports.collate(a[ak[i]], b[bk[i]]);
+    if (sort !== 0) {
+      return sort;
+    }
+
+  }
+  return (ak.length === bk.length) ? 0 :
+    (ak.length > bk.length) ? 1 : -1;
+}
+// The collation is defined by erlangs ordered terms
+// the atoms null, true, false come first, then numbers, strings,
+// arrays, then objects
+// null/undefined/NaN/Infinity/-Infinity are all considered null
+function collationIndex(x) {
+  var id = ['boolean', 'number', 'string', 'object'];
+  var idx = id.indexOf(typeof x);
+  //false if -1 otherwise true, but fast!!!!1
+  if (~idx) {
+    if (x === null) {
+      return 1;
+    }
+    if (Array.isArray(x)) {
+      return 5;
+    }
+    return idx < 3 ? (idx + 2) : (idx + 3);
+  }
+  if (Array.isArray(x)) {
+    return 5;
+  }
+}
+
+// conversion:
+// x yyy zz...zz
+// x = 0 for negative, 1 for 0, 2 for positive
+// y = exponent (for negative numbers negated) moved so that it's >= 0
+// z = mantisse
+function numToIndexableString(num) {
+
+  if (num === 0) {
+    return '1';
+  }
+
+  // convert number to exponential format for easier and
+  // more succinct string sorting
+  var expFormat = num.toExponential().split(/e\+?/);
+  var magnitude = parseInt(expFormat[1], 10);
+
+  var neg = num < 0;
+
+  var result = neg ? '0' : '2';
+
+  // first sort by magnitude
+  // it's easier if all magnitudes are positive
+  var magForComparison = ((neg ? -magnitude : magnitude) - MIN_MAGNITUDE);
+  var magString = utils.padLeft((magForComparison).toString(), '0', MAGNITUDE_DIGITS);
+
+  result += SEP + magString;
+
+  // then sort by the factor
+  var factor = Math.abs(parseFloat(expFormat[0])); // [1..10)
+  if (neg) { // for negative reverse ordering
+    factor = 10 - factor;
+  }
+
+  var factorStr = factor.toFixed(20);
+
+  // strip zeros from the end
+  factorStr = factorStr.replace(/\.?0+$/, '');
+
+  result += SEP + factorStr;
+
+  return result;
+}
+
+},{"./utils":22}],22:[function(require,module,exports){
+'use strict';
+
+function pad(str, padWith, upToLength) {
+  var padding = '';
+  var targetLength = upToLength - str.length;
+  while (padding.length < targetLength) {
+    padding += padWith;
+  }
+  return padding;
+}
+
+exports.padLeft = function (str, padWith, upToLength) {
+  var padding = pad(str, padWith, upToLength);
+  return padding + str;
+};
+
+exports.padRight = function (str, padWith, upToLength) {
+  var padding = pad(str, padWith, upToLength);
+  return str + padding;
+};
+
+exports.stringLexCompare = function (a, b) {
+
+  var aLen = a.length;
+  var bLen = b.length;
+
+  var i;
+  for (i = 0; i < aLen; i++) {
+    if (i === bLen) {
+      // b is shorter substring of a
+      return 1;
+    }
+    var aChar = a.charAt(i);
+    var bChar = b.charAt(i);
+    if (aChar !== bChar) {
+      return aChar < bChar ? -1 : 1;
+    }
+  }
+
+  if (aLen < bLen) {
+    // a is shorter substring of b
+    return -1;
+  }
+
+  return 0;
+};
+
+/*
+ * returns the decimal form for the given integer, i.e. writes
+ * out all the digits (in base-10) instead of using scientific notation
+ */
+exports.intToDecimalForm = function (int) {
+
+  var isNeg = int < 0;
+  var result = '';
+
+  do {
+    var remainder = isNeg ? -Math.ceil(int % 10) : Math.floor(int % 10);
+
+    result = remainder + result;
+    int = isNeg ? Math.ceil(int / 10) : Math.floor(int / 10);
+  } while (int);
+
+
+  if (isNeg && result !== '0') {
+    result = '-' + result;
+  }
+
+  return result;
+};
+},{}],23:[function(require,module,exports){
 "use strict";
 
 // Extends method
@@ -3012,7 +3383,7 @@ module.exports = extend;
 
 
 
-},{}],23:[function(require,module,exports){
+},{}],24:[function(require,module,exports){
 'use strict';
 
 var upsert = require('./upsert');
@@ -3108,7 +3479,7 @@ module.exports = function (opts) {
   });
 };
 
-},{"./upsert":31,"./utils":32}],24:[function(require,module,exports){
+},{"./upsert":28,"./utils":29}],25:[function(require,module,exports){
 'use strict';
 
 module.exports = function (func, emit, sum, log, isArray, toJSON) {
@@ -3116,7 +3487,7 @@ module.exports = function (func, emit, sum, log, isArray, toJSON) {
   return eval("'use strict'; (" + func.replace(/;\s*$/, "") + ");");
 };
 
-},{}],25:[function(require,module,exports){
+},{}],26:[function(require,module,exports){
 var process=require("__browserify_process");'use strict';
 
 var pouchCollate = require('pouchdb-collate');
@@ -3993,433 +4364,147 @@ function NotFoundError(message) {
 
 utils.inherits(NotFoundError, Error);
 
-},{"./create-view":23,"./evalfunc":24,"./taskqueue":30,"./utils":32,"__browserify_process":4,"pouchdb-collate":26}],26:[function(require,module,exports){
+},{"./create-view":24,"./evalfunc":25,"./taskqueue":27,"./utils":29,"__browserify_process":31,"pouchdb-collate":21}],27:[function(require,module,exports){
 'use strict';
-
-var MIN_MAGNITUDE = -324; // verified by -Number.MIN_VALUE
-var MAGNITUDE_DIGITS = 3; // ditto
-var SEP = ''; // set to '_' for easier debugging 
-
-var utils = require('./utils');
-
-exports.collate = function (a, b) {
-
-  if (a === b) {
-    return 0;
-  }
-
-  a = exports.normalizeKey(a);
-  b = exports.normalizeKey(b);
-
-  var ai = collationIndex(a);
-  var bi = collationIndex(b);
-  if ((ai - bi) !== 0) {
-    return ai - bi;
-  }
-  if (a === null) {
-    return 0;
-  }
-  switch (typeof a) {
-    case 'number':
-      return a - b;
-    case 'boolean':
-      return a === b ? 0 : (a < b ? -1 : 1);
-    case 'string':
-      return stringCollate(a, b);
-  }
-  return Array.isArray(a) ? arrayCollate(a, b) : objectCollate(a, b);
-};
-
-// couch considers null/NaN/Infinity/-Infinity === undefined,
-// for the purposes of mapreduce indexes. also, dates get stringified.
-exports.normalizeKey = function (key) {
-  switch (typeof key) {
-    case 'undefined':
-      return null;
-    case 'number':
-      if (key === Infinity || key === -Infinity || isNaN(key)) {
-        return null;
-      }
-      return key;
-    case 'object':
-      var origKey = key;
-      if (Array.isArray(key)) {
-        var len = key.length;
-        key = new Array(len);
-        for (var i = 0; i < len; i++) {
-          key[i] = exports.normalizeKey(origKey[i]);
-        }
-      } else if (key instanceof Date) {
-        return key.toJSON();
-      } else if (key !== null) { // generic object
-        key = {};
-        for (var k in origKey) {
-          if (origKey.hasOwnProperty(k)) {
-            var val = origKey[k];
-            if (typeof val !== 'undefined') {
-              key[k] = exports.normalizeKey(val);
-            }
-          }
-        }
-      }
-  }
-  return key;
-};
-
-function indexify(key) {
-  if (key !== null) {
-    switch (typeof key) {
-      case 'boolean':
-        return key ? 1 : 0;
-      case 'number':
-        return numToIndexableString(key);
-      case 'string':
-        // We've to be sure that key does not contain \u0000
-        // Do order-preserving replacements:
-        // 0 -> 1, 1
-        // 1 -> 1, 2
-        // 2 -> 2, 2
-        return key
-          .replace(/\u0002/g, '\u0002\u0002')
-          .replace(/\u0001/g, '\u0001\u0002')
-          .replace(/\u0000/g, '\u0001\u0001');
-      case 'object':
-        var isArray = Array.isArray(key);
-        var arr = isArray ? key : Object.keys(key);
-        var i = -1;
-        var len = arr.length;
-        var result = '';
-        if (isArray) {
-          while (++i < len) {
-            result += exports.toIndexableString(arr[i]);
-          }
-        } else {
-          while (++i < len) {
-            var objKey = arr[i];
-            result += exports.toIndexableString(objKey) +
-                exports.toIndexableString(key[objKey]);
-          }
-        }
-        return result;
-    }
-  }
-  return '';
-}
-
-// convert the given key to a string that would be appropriate
-// for lexical sorting, e.g. within a database, where the
-// sorting is the same given by the collate() function.
-exports.toIndexableString = function (key) {
-  var zero = '\u0000';
-  key = exports.normalizeKey(key);
-  return collationIndex(key) + SEP + indexify(key) + zero;
-};
-
-function parseNumber(str, i) {
-  var originalIdx = i;
-  var num;
-  var zero = str[i] === '1';
-  if (zero) {
-    num = 0;
-    i++;
-  } else {
-    var neg = str[i] === '0';
-    i++;
-    var numAsString = '';
-    var magAsString = str.substring(i, i + MAGNITUDE_DIGITS);
-    var magnitude = parseInt(magAsString, 10) + MIN_MAGNITUDE;
-    if (neg) {
-      magnitude = -magnitude;
-    }
-    i += MAGNITUDE_DIGITS;
-    while (true) {
-      var ch = str[i];
-      if (ch === '\u0000') {
-        break;
-      } else {
-        numAsString += ch;
-      }
-      i++;
-    }
-    numAsString = numAsString.split('.');
-    if (numAsString.length === 1) {
-      num = parseInt(numAsString, 10);
-    } else {
-      num = parseFloat(numAsString[0] + '.' + numAsString[1]);
-    }
-    if (neg) {
-      num = num - 10;
-    }
-    if (magnitude !== 0) {
-      // parseFloat is more reliable than pow due to rounding errors
-      // e.g. Number.MAX_VALUE would return Infinity if we did
-      // num * Math.pow(10, magnitude);
-      num = parseFloat(num + 'e' + magnitude);
-    }
-  }
-  return {num: num, length : i - originalIdx};
-}
-
-// move up the stack while parsing
-// this function moved outside of parseIndexableString for performance
-function pop(stack, metaStack) {
-  var obj = stack.pop();
-
-  if (metaStack.length) {
-    var lastMetaElement = metaStack[metaStack.length - 1];
-    if (obj === lastMetaElement.element) {
-      // popping a meta-element, e.g. an object whose value is another object
-      metaStack.pop();
-      lastMetaElement = metaStack[metaStack.length - 1];
-    }
-    var element = lastMetaElement.element;
-    var lastElementIndex = lastMetaElement.index;
-    if (Array.isArray(element)) {
-      element.push(obj);
-    } else if (lastElementIndex === stack.length - 2) { // obj with key+value
-      var key = stack.pop();
-      element[key] = obj;
-    } else {
-      stack.push(obj); // obj with key only
-    }
-  }
-}
-
-exports.parseIndexableString = function (str) {
-  var stack = [];
-  var metaStack = []; // stack for arrays and objects
-  var i = 0;
-
-  while (true) {
-    var collationIndex = str[i++];
-    if (collationIndex === '\u0000') {
-      if (stack.length === 1) {
-        return stack.pop();
-      } else {
-        pop(stack, metaStack);
-        continue;
-      }
-    }
-    switch (collationIndex) {
-      case '1':
-        stack.push(null);
-        break;
-      case '2':
-        stack.push(str[i] === '1');
-        i++;
-        break;
-      case '3':
-        var parsedNum = parseNumber(str, i);
-        stack.push(parsedNum.num);
-        i += parsedNum.length;
-        break;
-      case '4':
-        var parsedStr = '';
-        while (true) {
-          var ch = str[i];
-          if (ch === '\u0000') {
-            break;
-          }
-          parsedStr += ch;
-          i++;
-        }
-        // perform the reverse of the order-preserving replacement
-        // algorithm (see above)
-        parsedStr = parsedStr.replace(/\u0001\u0001/g, '\u0000')
-          .replace(/\u0001\u0002/g, '\u0001')
-          .replace(/\u0002\u0002/g, '\u0002');
-        stack.push(parsedStr);
-        break;
-      case '5':
-        var arrayElement = { element: [], index: stack.length };
-        stack.push(arrayElement.element);
-        metaStack.push(arrayElement);
-        break;
-      case '6':
-        var objElement = { element: {}, index: stack.length };
-        stack.push(objElement.element);
-        metaStack.push(objElement);
-        break;
-      default:
-        throw new Error(
-          'bad collationIndex or unexpectedly reached end of input: ' + collationIndex);
-    }
-  }
-};
-
-function arrayCollate(a, b) {
-  var len = Math.min(a.length, b.length);
-  for (var i = 0; i < len; i++) {
-    var sort = exports.collate(a[i], b[i]);
-    if (sort !== 0) {
-      return sort;
-    }
-  }
-  return (a.length === b.length) ? 0 :
-    (a.length > b.length) ? 1 : -1;
-}
-function stringCollate(a, b) {
-  // See: https://github.com/daleharvey/pouchdb/issues/40
-  // This is incompatible with the CouchDB implementation, but its the
-  // best we can do for now
-  return (a === b) ? 0 : ((a > b) ? 1 : -1);
-}
-function objectCollate(a, b) {
-  var ak = Object.keys(a), bk = Object.keys(b);
-  var len = Math.min(ak.length, bk.length);
-  for (var i = 0; i < len; i++) {
-    // First sort the keys
-    var sort = exports.collate(ak[i], bk[i]);
-    if (sort !== 0) {
-      return sort;
-    }
-    // if the keys are equal sort the values
-    sort = exports.collate(a[ak[i]], b[bk[i]]);
-    if (sort !== 0) {
-      return sort;
-    }
-
-  }
-  return (ak.length === bk.length) ? 0 :
-    (ak.length > bk.length) ? 1 : -1;
-}
-// The collation is defined by erlangs ordered terms
-// the atoms null, true, false come first, then numbers, strings,
-// arrays, then objects
-// null/undefined/NaN/Infinity/-Infinity are all considered null
-function collationIndex(x) {
-  var id = ['boolean', 'number', 'string', 'object'];
-  var idx = id.indexOf(typeof x);
-  //false if -1 otherwise true, but fast!!!!1
-  if (~idx) {
-    if (x === null) {
-      return 1;
-    }
-    if (Array.isArray(x)) {
-      return 5;
-    }
-    return idx < 3 ? (idx + 2) : (idx + 3);
-  }
-  if (Array.isArray(x)) {
-    return 5;
-  }
-}
-
-// conversion:
-// x yyy zz...zz
-// x = 0 for negative, 1 for 0, 2 for positive
-// y = exponent (for negative numbers negated) moved so that it's >= 0
-// z = mantisse
-function numToIndexableString(num) {
-
-  if (num === 0) {
-    return '1';
-  }
-
-  // convert number to exponential format for easier and
-  // more succinct string sorting
-  var expFormat = num.toExponential().split(/e\+?/);
-  var magnitude = parseInt(expFormat[1], 10);
-
-  var neg = num < 0;
-
-  var result = neg ? '0' : '2';
-
-  // first sort by magnitude
-  // it's easier if all magnitudes are positive
-  var magForComparison = ((neg ? -magnitude : magnitude) - MIN_MAGNITUDE);
-  var magString = utils.padLeft((magForComparison).toString(), '0', MAGNITUDE_DIGITS);
-
-  result += SEP + magString;
-
-  // then sort by the factor
-  var factor = Math.abs(parseFloat(expFormat[0])); // [1..10)
-  if (neg) { // for negative reverse ordering
-    factor = 10 - factor;
-  }
-
-  var factorStr = factor.toFixed(20);
-
-  // strip zeros from the end
-  factorStr = factorStr.replace(/\.?0+$/, '');
-
-  result += SEP + factorStr;
-
-  return result;
-}
-
-},{"./utils":27}],27:[function(require,module,exports){
-'use strict';
-
-function pad(str, padWith, upToLength) {
-  var padding = '';
-  var targetLength = upToLength - str.length;
-  while (padding.length < targetLength) {
-    padding += padWith;
-  }
-  return padding;
-}
-
-exports.padLeft = function (str, padWith, upToLength) {
-  var padding = pad(str, padWith, upToLength);
-  return padding + str;
-};
-
-exports.padRight = function (str, padWith, upToLength) {
-  var padding = pad(str, padWith, upToLength);
-  return str + padding;
-};
-
-exports.stringLexCompare = function (a, b) {
-
-  var aLen = a.length;
-  var bLen = b.length;
-
-  var i;
-  for (i = 0; i < aLen; i++) {
-    if (i === bLen) {
-      // b is shorter substring of a
-      return 1;
-    }
-    var aChar = a.charAt(i);
-    var bChar = b.charAt(i);
-    if (aChar !== bChar) {
-      return aChar < bChar ? -1 : 1;
-    }
-  }
-
-  if (aLen < bLen) {
-    // a is shorter substring of b
-    return -1;
-  }
-
-  return 0;
-};
-
 /*
- * returns the decimal form for the given integer, i.e. writes
- * out all the digits (in base-10) instead of using scientific notation
+ * Simple task queue to sequentialize actions. Assumes callbacks will eventually fire (once).
  */
-exports.intToDecimalForm = function (int) {
 
-  var isNeg = int < 0;
-  var result = '';
+var Promise = require('./utils').Promise;
 
-  do {
-    var remainder = isNeg ? -Math.ceil(int % 10) : Math.floor(int % 10);
+function TaskQueue() {
+  this.promise = new Promise(function (fulfill) {fulfill(); });
+}
+TaskQueue.prototype.add = function (promiseFactory) {
+  this.promise = this.promise["catch"](function () {
+    // just recover
+  }).then(function () {
+    return promiseFactory();
+  });
+  return this.promise;
+};
+TaskQueue.prototype.finish = function () {
+  return this.promise;
+};
 
-    result = remainder + result;
-    int = isNeg ? Math.ceil(int / 10) : Math.floor(int / 10);
-  } while (int);
+module.exports = TaskQueue;
 
+},{"./utils":29}],28:[function(require,module,exports){
+'use strict';
 
-  if (isNeg && result !== '0') {
-    result = '-' + result;
+var upsert = require('pouchdb-upsert').upsert;
+
+module.exports = function (db, doc, diffFun) {
+  return upsert.apply(db, [doc, diffFun]);
+};
+},{"pouchdb-upsert":30}],29:[function(require,module,exports){
+var process=require("__browserify_process"),global=typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {};'use strict';
+/* istanbul ignore if */
+if (typeof global.Promise === 'function') {
+  exports.Promise = global.Promise;
+} else {
+  exports.Promise = require('lie');
+}
+
+exports.inherits = require('inherits');
+exports.extend = require('pouchdb-extend');
+var argsarray = require('argsarray');
+
+exports.promisedCallback = function (promise, callback) {
+  if (callback) {
+    promise.then(function (res) {
+      process.nextTick(function () {
+        callback(null, res);
+      });
+    }, function (reason) {
+      process.nextTick(function () {
+        callback(reason);
+      });
+    });
+  }
+  return promise;
+};
+
+exports.callbackify = function (fun) {
+  return argsarray(function (args) {
+    var cb = args.pop();
+    var promise = fun.apply(this, args);
+    if (typeof cb === 'function') {
+      exports.promisedCallback(promise, cb);
+    }
+    return promise;
+  });
+};
+
+// Promise finally util similar to Q.finally
+exports.fin = function (promise, cb) {
+  return promise.then(function (res) {
+    var promise2 = cb();
+    if (typeof promise2.then === 'function') {
+      return promise2.then(function () {
+        return res;
+      });
+    }
+    return res;
+  }, function (reason) {
+    var promise2 = cb();
+    if (typeof promise2.then === 'function') {
+      return promise2.then(function () {
+        throw reason;
+      });
+    }
+    throw reason;
+  });
+};
+
+exports.sequentialize = function (queue, promiseFactory) {
+  return function () {
+    var args = arguments;
+    var that = this;
+    return queue.add(function () {
+      return promiseFactory.apply(that, args);
+    });
+  };
+};
+
+exports.flatten = function (arrs) {
+  var res = [];
+  for (var i = 0, len = arrs.length; i < len; i++) {
+    res = res.concat(arrs[i]);
+  }
+  return res;
+};
+
+// uniq an array of strings, order not guaranteed
+// similar to underscore/lodash _.uniq
+exports.uniq = function (arr) {
+  var map = {};
+
+  for (var i = 0, len = arr.length; i < len; i++) {
+    map['$' + arr[i]] = true;
   }
 
-  return result;
+  var keys = Object.keys(map);
+  var output = new Array(keys.length);
+
+  for (i = 0, len = keys.length; i < len; i++) {
+    output[i] = keys[i].substring(1);
+  }
+  return output;
 };
-},{}],28:[function(require,module,exports){
+
+var crypto = require('crypto');
+var Md5 = require('spark-md5');
+
+exports.MD5 = function (string) {
+  /* istanbul ignore else */
+  if (!process.browser) {
+    return crypto.createHash('md5').update(string).digest('hex');
+  } else {
+    return Md5.hash(string);
+  }
+};
+},{"__browserify_process":31,"argsarray":2,"crypto":3,"inherits":5,"lie":9,"pouchdb-extend":23,"spark-md5":32}],30:[function(require,module,exports){
 var global=typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {};'use strict';
 
 var PouchPromise;
@@ -4524,7 +4609,62 @@ if (typeof window !== 'undefined' && window.PouchDB) {
   window.PouchDB.plugin(exports);
 }
 
-},{"lie":9}],29:[function(require,module,exports){
+},{"lie":9}],31:[function(require,module,exports){
+// shim for using process in browser
+
+var process = module.exports = {};
+
+process.nextTick = (function () {
+    var canSetImmediate = typeof window !== 'undefined'
+    && window.setImmediate;
+    var canPost = typeof window !== 'undefined'
+    && window.postMessage && window.addEventListener
+    ;
+
+    if (canSetImmediate) {
+        return function (f) { return window.setImmediate(f) };
+    }
+
+    if (canPost) {
+        var queue = [];
+        window.addEventListener('message', function (ev) {
+            var source = ev.source;
+            if ((source === window || source === null) && ev.data === 'process-tick') {
+                ev.stopPropagation();
+                if (queue.length > 0) {
+                    var fn = queue.shift();
+                    fn();
+                }
+            }
+        }, true);
+
+        return function nextTick(fn) {
+            queue.push(fn);
+            window.postMessage('process-tick', '*');
+        };
+    }
+
+    return function nextTick(fn) {
+        setTimeout(fn, 0);
+    };
+})();
+
+process.title = 'browser';
+process.browser = true;
+process.env = {};
+process.argv = [];
+
+process.binding = function (name) {
+    throw new Error('process.binding is not supported');
+}
+
+// TODO(shtylman)
+process.cwd = function () { return '/' };
+process.chdir = function (dir) {
+    throw new Error('process.chdir is not supported');
+};
+
+},{}],32:[function(require,module,exports){
 /*jshint bitwise:false*/
 /*global unescape*/
 
@@ -5125,147 +5265,7 @@ if (typeof window !== 'undefined' && window.PouchDB) {
     return SparkMD5;
 }));
 
-},{}],30:[function(require,module,exports){
-'use strict';
-/*
- * Simple task queue to sequentialize actions. Assumes callbacks will eventually fire (once).
- */
-
-var Promise = require('./utils').Promise;
-
-function TaskQueue() {
-  this.promise = new Promise(function (fulfill) {fulfill(); });
-}
-TaskQueue.prototype.add = function (promiseFactory) {
-  this.promise = this.promise["catch"](function () {
-    // just recover
-  }).then(function () {
-    return promiseFactory();
-  });
-  return this.promise;
-};
-TaskQueue.prototype.finish = function () {
-  return this.promise;
-};
-
-module.exports = TaskQueue;
-
-},{"./utils":32}],31:[function(require,module,exports){
-'use strict';
-
-var upsert = require('pouchdb-upsert').upsert;
-
-module.exports = function (db, doc, diffFun) {
-  return upsert.apply(db, [doc, diffFun]);
-};
-},{"pouchdb-upsert":28}],32:[function(require,module,exports){
-var process=require("__browserify_process"),global=typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {};'use strict';
-/* istanbul ignore if */
-if (typeof global.Promise === 'function') {
-  exports.Promise = global.Promise;
-} else {
-  exports.Promise = require('lie');
-}
-
-exports.inherits = require('inherits');
-exports.extend = require('pouchdb-extend');
-var argsarray = require('argsarray');
-
-exports.promisedCallback = function (promise, callback) {
-  if (callback) {
-    promise.then(function (res) {
-      process.nextTick(function () {
-        callback(null, res);
-      });
-    }, function (reason) {
-      process.nextTick(function () {
-        callback(reason);
-      });
-    });
-  }
-  return promise;
-};
-
-exports.callbackify = function (fun) {
-  return argsarray(function (args) {
-    var cb = args.pop();
-    var promise = fun.apply(this, args);
-    if (typeof cb === 'function') {
-      exports.promisedCallback(promise, cb);
-    }
-    return promise;
-  });
-};
-
-// Promise finally util similar to Q.finally
-exports.fin = function (promise, cb) {
-  return promise.then(function (res) {
-    var promise2 = cb();
-    if (typeof promise2.then === 'function') {
-      return promise2.then(function () {
-        return res;
-      });
-    }
-    return res;
-  }, function (reason) {
-    var promise2 = cb();
-    if (typeof promise2.then === 'function') {
-      return promise2.then(function () {
-        throw reason;
-      });
-    }
-    throw reason;
-  });
-};
-
-exports.sequentialize = function (queue, promiseFactory) {
-  return function () {
-    var args = arguments;
-    var that = this;
-    return queue.add(function () {
-      return promiseFactory.apply(that, args);
-    });
-  };
-};
-
-exports.flatten = function (arrs) {
-  var res = [];
-  for (var i = 0, len = arrs.length; i < len; i++) {
-    res = res.concat(arrs[i]);
-  }
-  return res;
-};
-
-// uniq an array of strings, order not guaranteed
-// similar to underscore/lodash _.uniq
-exports.uniq = function (arr) {
-  var map = {};
-
-  for (var i = 0, len = arr.length; i < len; i++) {
-    map['$' + arr[i]] = true;
-  }
-
-  var keys = Object.keys(map);
-  var output = new Array(keys.length);
-
-  for (i = 0, len = keys.length; i < len; i++) {
-    output[i] = keys[i].substring(1);
-  }
-  return output;
-};
-
-var crypto = require('crypto');
-var Md5 = require('spark-md5');
-
-exports.MD5 = function (string) {
-  /* istanbul ignore else */
-  if (!process.browser) {
-    return crypto.createHash('md5').update(string).digest('hex');
-  } else {
-    return Md5.hash(string);
-  }
-};
-},{"__browserify_process":4,"argsarray":2,"crypto":3,"inherits":5,"lie":9,"pouchdb-extend":22,"spark-md5":29}],33:[function(require,module,exports){
+},{}],33:[function(require,module,exports){
 "use strict"
 
 function unique_pred(list, compare) {
@@ -5420,5 +5420,5 @@ exports.MD5 = function (string) {
 };
 
 exports.extend = require('pouchdb-extend');
-},{"__browserify_process":4,"crypto":3,"inherits":5,"lie":9,"md5-jkmyers":21,"pouchdb-extend":22}]},{},[1])
+},{"__browserify_process":31,"crypto":3,"inherits":5,"lie":9,"md5-jkmyers":20,"pouchdb-extend":23}]},{},[1])
 ;
