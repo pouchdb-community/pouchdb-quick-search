@@ -48,7 +48,7 @@ This plugin is also available from Bower:
 bower install pouchdb-quick-search
 ```
 
-#### In Node.js
+#### In Node.js/Browserify/Webpack
 
 Just npm install it:
 
