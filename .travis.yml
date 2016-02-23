@@ -4,7 +4,9 @@ services:
   - couchdb
 
 node_js:
-  - "0.10"
+  - "stable"
+addons:
+  firefox: 41.0.1
 script: npm run $COMMAND
 before_script:
   - "export DISPLAY=:99.0"
@@ -25,6 +27,6 @@ after_failure:
 env:
   matrix:
   - COMMAND=test
-  - CLIENT=selenium:firefox COMMAND=test
+  - CLIENT=selenium:firefox:41.0.1 COMMAND=test
   - CLIENT=selenium:phantomjs COMMAND=test
   - COMMAND=coverage
