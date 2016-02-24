@@ -49,15 +49,16 @@ function tests(dbName, dbType) {
 
   var db;
 
-  beforeEach(function () {
-    db = new Pouch(dbName);
-    return db;
-  });
-  afterEach(function () {
-    return db.destroy();
-  });
   describe(dbType + ': search test suite', function () {
     this.timeout(30000);
+
+    beforeEach(function () {
+      db = new Pouch(dbName);
+      return db;
+    });
+    afterEach(function () {
+      return db.destroy();
+    });
     
     it('basic search', function () {
       return db.bulkDocs({docs: docs}).then(function () {
