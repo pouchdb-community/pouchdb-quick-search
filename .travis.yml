@@ -6,8 +6,6 @@ services:
 
 node_js:
   - "stable"
-addons:
-  firefox: "latest"
 script: npm run $COMMAND
 before_script:
   - "export DISPLAY=:99.0"
