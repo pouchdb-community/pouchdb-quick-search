@@ -77,6 +77,7 @@ API
 * [Minimum should match (mm)](#minimum-should-match-mm)
 * [Filtering documents](#filtering-documents)
 * [Building the index](#building-the-index)
+* [Passing Options to lunr.js during build](#passing-options-to-lunr.js-during-build)
 * [Deleting the index](#deleting-the-index)
 * [Stale queries](#stale-queries)
 * [Other languages](#other-languages)
@@ -421,6 +422,23 @@ pouch.search({
 This will build up the index without querying it. If the database has changed since you last updated (e.g. new documents were added), then it will simply update the index with the new documents. If nothing has changed, then it won't do anything.
 
 You must at least provide the `fields` you want to index.  If the language isn't English, you must pass in the `language` option.  Boosts don't matter.
+
+### Passing Options to lunr.js during build
+
+You can pass in options to lunr.js during the index build by adding a `lunrOptions` option to the search. `lunrOptions` is a function whereby you can access the lunr instance via `this` from within the function. For example, if you wanted to add a function to the pipeline, you could do it like so:
+
+```js
+pouch.search({
+  fields: ['title', 'text'],
+  build: true,
+  lunrOptions: function(){
+    this.pipeline.add(function (token, tokenIndex, tokens) {
+      // text processing in here
+    })
+  }
+});
+```
+More info on the lunr.js methods available here: http://lunrjs.com/docs/
 
 ### Deleting the index
 

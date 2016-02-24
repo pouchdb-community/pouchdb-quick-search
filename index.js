@@ -102,6 +102,7 @@ exports.search = utils.toPromise(function (opts, callback) {
   var stale = opts.stale;
   var limit = opts.limit;
   var build = opts.build;
+  var lunrOptions = build ? opts.lunrOptions : null;
   var skip = opts.skip || 0;
   var language = opts.language || 'en';
   var filter = opts.filter;
@@ -125,7 +126,7 @@ exports.search = utils.toPromise(function (opts, callback) {
 
   var index = indexes[language];
   if (!index) {
-    index = indexes[language] = lunr();
+    index = indexes[language] = lunr(lunrOptions);
     if (language !== 'en') {
       index.use(global.lunr[language]);
     }
