@@ -38,8 +38,22 @@ function getText(fieldBoost, doc) {
     text = doc[fieldBoost.field];
   } else { // "Enhance."
     text = doc;
+    var handleNestedObjectArrayItem = function (deepField) {
+      return function (one) {
+        return getText(utils.extend({}, fieldBoost, {
+          deepField: deepField
+        }), one);
+      };
+    };
     for (var i = 0, len = fieldBoost.deepField.length; i < len; i++) {
-      text = text && text[fieldBoost.deepField[i]];
+      if (fieldBoost.deepField[i] === '' && Array.isArray(text)) {
+        // Nested array of objects, field definition like 'nested.array[].field.name'
+        // We then loop through all the objects and search for 'field.name'
+        text = text.map(handleNestedObjectArrayItem(fieldBoost.deepField.slice(i + 1)));
+        break;
+      } else {
+        text = text && text[fieldBoost.deepField[i]];
+      }
     }
   }
   if (text) {
@@ -115,7 +129,7 @@ exports.search = utils.toPromise(function (opts, callback) {
   }
 
   var fieldBoosts = Object.keys(fields).map(function (field) {
-    var deepField = field.indexOf('.') !== -1 && field.split('.');
+    var deepField = field.indexOf('.') !== -1 && field.replace(/\[\]/g, '.').split('.');
     return {
       field: field,
       deepField: deepField,
