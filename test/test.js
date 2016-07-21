@@ -21,9 +21,9 @@ require('bluebird'); // var Promise = require('bluebird');
 
 // have to make this global for the languages plugin, sadly
 global.lunr = require('lunr');
-require('./deps/lunr.stemmer.support');
-require('./deps/lunr.fr');
-
+require('./deps/lunr.stemmer.support')(global.lunr);
+require('./deps/lunr.fr')(global.lunr);
+require('./deps/lunr.multi')(global.lunr);
 var dbs;
 if (process.browser) {
   dbs = 'testdb' + Math.random();
@@ -59,7 +59,7 @@ function tests(dbName, dbType) {
     afterEach(function () {
       return db.destroy();
     });
-    
+
     it('basic search', function () {
       return db.bulkDocs({docs: docs}).then(function () {
         var opts = {
@@ -100,12 +100,12 @@ function tests(dbName, dbType) {
     });
 
     it('basic search - ordering', function () {
-      
+
       // the word "court" is used once in the first doc,
       // twice in the second, and twice in the third,
       // but the third is longest, so tf-idf should give us
       // 2 3 1
-      
+
       return db.bulkDocs({docs: docs}).then(function () {
         var opts = {
           fields: ['title', 'text', 'desc'],
@@ -673,6 +673,30 @@ function tests(dbName, dbType) {
       }).then(function (res) {
         var ids = res.rows.map(function (x) { return x.id; });
         ids.should.deep.equal(['2']);
+        return db.search({
+          fields: ['text'],
+          query: 'parlera',
+          language: ['en','fr']
+        });
+      }).then(function(res) {
+        var ids = res.rows.map(function (x) { return x.id; });
+        ids.should.deep.equal(['2']);
+        return db.search({
+          fields: ['text'],
+          query: 'spleen',
+          language: ['en','fr']
+        });
+      }).then(function(res) {
+        var ids = res.rows.map(function (x) { return x.id; }).sort();
+        ids.should.deep.equal(['1', '2']);
+        return db.search({
+          fields: ['text'],
+          query: 'works',
+          language: ['en','fr']
+        });
+      }).then(function(res) {
+        var ids = res.rows.map(function (x) { return x.id; }).sort();
+        ids.should.deep.equal(['3']);
       });
     });
 

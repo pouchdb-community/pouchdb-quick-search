@@ -61,5 +61,8 @@
     "watchify": "^3.1.0",
     "wd": "^0.2.21"
   },
-  "lib": ["lib", "dist"]
+  "lib": [
+    "lib",
+    "dist"
+  ]
 }
