@@ -377,7 +377,7 @@ module.exports = Node;
 var stateProps = [
   'enc', 'parent', 'children', 'tag', 'args', 'reverseArgs', 'choice',
   'optional', 'any', 'obj', 'use', 'alteredUse', 'key', 'default', 'explicit',
-  'implicit'
+  'implicit', 'contains'
 ];
 
 Node.prototype.clone = function clone() {
@@ -582,17 +582,17 @@ Node.prototype.contains = function contains(item) {
 // Decoding
 //
 
-Node.prototype._decode = function decode(input) {
+Node.prototype._decode = function decode(input, options) {
   var state = this._baseState;
 
   // Decode root node
   if (state.parent === null)
-    return input.wrapResult(state.children[0]._decode(input));
+    return input.wrapResult(state.children[0]._decode(input, options));
 
   var result = state['default'];
   var present = true;
 
-  var prevKey;
+  var prevKey = null;
   if (state.key !== null)
     prevKey = input.enterKey(state.key);
 
@@ -611,9 +611,9 @@ Node.prototype._decode = function decode(input) {
       var save = input.save();
       try {
         if (state.choice === null)
-          this._decodeGeneric(state.tag, input);
+          this._decodeGeneric(state.tag, input, options);
         else
-          this._decodeChoice(input);
+          this._decodeChoice(input, options);
         present = true;
       } catch (e) {
         present = false;
@@ -641,6 +641,8 @@ Node.prototype._decode = function decode(input) {
       input = explicit;
     }
 
+    var start = input.offset;
+
     // Unwrap implicit and normal values
     if (state.use === null && state.choice === null) {
       if (state.any)
@@ -659,13 +661,19 @@ Node.prototype._decode = function decode(input) {
         input = body;
     }
 
+    if (options && options.track && state.tag !== null)
+      options.track(input.path(), start, input.length, 'tagged');
+
+    if (options && options.track && state.tag !== null)
+      options.track(input.path(), input.offset, input.length, 'content');
+
     // Select proper method for tag
     if (state.any)
       result = result;
     else if (state.choice === null)
-      result = this._decodeGeneric(state.tag, input);
+      result = this._decodeGeneric(state.tag, input, options);
     else
-      result = this._decodeChoice(input);
+      result = this._decodeChoice(input, options);
 
     if (input.isError(result))
       return result;
@@ -675,14 +683,15 @@ Node.prototype._decode = function decode(input) {
       state.children.forEach(function decodeChildren(child) {
         // NOTE: We are ignoring errors here, to let parser continue with other
         // parts of encoded data
-        child._decode(input);
+        child._decode(input, options);
       });
     }
 
     // Decode contained/encoded by schema, only in bit or octet strings
     if (state.contains && (state.tag === 'octstr' || state.tag === 'bitstr')) {
       var data = new DecoderBuffer(result);
-      result = this._getUse(state.contains, input._reporterState.obj)._decode(data);
+      result = this._getUse(state.contains, input._reporterState.obj)
+          ._decode(data, options);
     }
   }
 
@@ -693,35 +702,40 @@ Node.prototype._decode = function decode(input) {
   // Set key
   if (state.key !== null && (result !== null || present === true))
     input.leaveKey(prevKey, state.key, result);
+  else if (prevKey !== null)
+    input.exitKey(prevKey);
 
   return result;
 };
 
-Node.prototype._decodeGeneric = function decodeGeneric(tag, input) {
+Node.prototype._decodeGeneric = function decodeGeneric(tag, input, options) {
   var state = this._baseState;
 
   if (tag === 'seq' || tag === 'set')
     return null;
   if (tag === 'seqof' || tag === 'setof')
-    return this._decodeList(input, tag, state.args[0]);
+    return this._decodeList(input, tag, state.args[0], options);
   else if (/str$/.test(tag))
-    return this._decodeStr(input, tag);
+    return this._decodeStr(input, tag, options);
   else if (tag === 'objid' && state.args)
-    return this._decodeObjid(input, state.args[0], state.args[1]);
+    return this._decodeObjid(input, state.args[0], state.args[1], options);
   else if (tag === 'objid')
-    return this._decodeObjid(input, null, null);
+    return this._decodeObjid(input, null, null, options);
   else if (tag === 'gentime' || tag === 'utctime')
-    return this._decodeTime(input, tag);
+    return this._decodeTime(input, tag, options);
   else if (tag === 'null_')
-    return this._decodeNull(input);
+    return this._decodeNull(input, options);
   else if (tag === 'bool')
-    return this._decodeBool(input);
+    return this._decodeBool(input, options);
   else if (tag === 'int' || tag === 'enum')
-    return this._decodeInt(input, state.args && state.args[0]);
-  else if (state.use !== null)
-    return this._getUse(state.use, input._reporterState.obj)._decode(input);
-  else
+    return this._decodeInt(input, state.args && state.args[0], options);
+
+  if (state.use !== null) {
+    return this._getUse(state.use, input._reporterState.obj)
+        ._decode(input, options);
+  } else {
     return input.error('unknown tag: ' + tag);
+  }
 };
 
 Node.prototype._getUse = function _getUse(entity, obj) {
@@ -738,7 +752,7 @@ Node.prototype._getUse = function _getUse(entity, obj) {
   return state.useDecoder;
 };
 
-Node.prototype._decodeChoice = function decodeChoice(input) {
+Node.prototype._decodeChoice = function decodeChoice(input, options) {
   var state = this._baseState;
   var result = null;
   var match = false;
@@ -747,7 +761,7 @@ Node.prototype._decodeChoice = function decodeChoice(input) {
     var save = input.save();
     var node = state.choice[key];
     try {
-      var value = node._decode(input);
+      var value = node._decode(input, options);
       if (input.isError(value))
         return false;
 
@@ -962,12 +976,22 @@ Reporter.prototype.enterKey = function enterKey(key) {
   return this._reporterState.path.push(key);
 };
 
-Reporter.prototype.leaveKey = function leaveKey(index, key, value) {
+Reporter.prototype.exitKey = function exitKey(index) {
   var state = this._reporterState;
 
   state.path = state.path.slice(0, index - 1);
+};
+
+Reporter.prototype.leaveKey = function leaveKey(index, key, value) {
+  var state = this._reporterState;
+
+  this.exitKey(index);
   if (state.obj !== null)
     state.obj[key] = value;
+};
+
+Reporter.prototype.path = function path() {
+  return this._reporterState.path.join('/');
 };
 
 Reporter.prototype.enterObject = function enterObject() {
@@ -1217,14 +1241,15 @@ DERNode.prototype._skipUntilEnd = function skipUntilEnd(buffer, fail) {
   }
 };
 
-DERNode.prototype._decodeList = function decodeList(buffer, tag, decoder) {
+DERNode.prototype._decodeList = function decodeList(buffer, tag, decoder,
+                                                    options) {
   var result = [];
   while (!buffer.isEmpty()) {
     var possibleEnd = this._peekTag(buffer, 'end');
     if (buffer.isError(possibleEnd))
       return possibleEnd;
 
-    var res = decoder.decode(buffer, 'der');
+    var res = decoder.decode(buffer, 'der', options);
     if (buffer.isError(res) && possibleEnd)
       break;
     result.push(res);
@@ -1994,8 +2019,12 @@ var lookup = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
   }
 
   BN.isBN = function isBN (num) {
+    if (num instanceof BN) {
+      return true;
+    }
+
     return num !== null && typeof num === 'object' &&
-      num.constructor.name === 'BN' && Array.isArray(num.words);
+      num.constructor.wordSize === BN.wordSize && Array.isArray(num.words);
   };
 
   BN.max = function max (left, right) {
@@ -14977,16 +15006,8 @@ utils.intFromLE = intFromLE;
 module.exports={
   "_args": [
     [
-      {
-        "raw": "elliptic@^6.0.0",
-        "scope": null,
-        "escapedName": "elliptic",
-        "name": "elliptic",
-        "rawSpec": "^6.0.0",
-        "spec": ">=6.0.0 <7.0.0",
-        "type": "range"
-      },
-      "/Users/nolan/workspace/pouchdb-quick-search/node_modules/browserify-sign"
+      "elliptic@^6.0.0",
+      "/Users/jaynakus/Projects/pouchdb-quick-search/node_modules/browserify-sign"
     ]
   ],
   "_from": "elliptic@>=6.0.0 <7.0.0",
@@ -15000,17 +15021,16 @@ module.exports={
     "tmp": "tmp/elliptic-6.3.1.tgz_1465921413402_0.5202967382501811"
   },
   "_npmUser": {
-    "name": "indutny",
-    "email": "fedor@indutny.com"
+    "email": "fedor@indutny.com",
+    "name": "indutny"
   },
   "_npmVersion": "3.8.6",
   "_phantomChildren": {},
   "_requested": {
-    "raw": "elliptic@^6.0.0",
-    "scope": null,
-    "escapedName": "elliptic",
     "name": "elliptic",
+    "raw": "elliptic@^6.0.0",
     "rawSpec": "^6.0.0",
+    "scope": null,
     "spec": ">=6.0.0 <7.0.0",
     "type": "range"
   },
@@ -15022,10 +15042,10 @@ module.exports={
   "_shasum": "17781f2109ab0ec686b146bdcff5d2e8c6aeceda",
   "_shrinkwrap": null,
   "_spec": "elliptic@^6.0.0",
-  "_where": "/Users/nolan/workspace/pouchdb-quick-search/node_modules/browserify-sign",
+  "_where": "/Users/jaynakus/Projects/pouchdb-quick-search/node_modules/browserify-sign",
   "author": {
-    "name": "Fedor Indutny",
-    "email": "fedor@indutny.com"
+    "email": "fedor@indutny.com",
+    "name": "Fedor Indutny"
   },
   "bugs": {
     "url": "https://github.com/indutny/elliptic/issues"
@@ -15072,8 +15092,8 @@ module.exports={
   "main": "lib/elliptic.js",
   "maintainers": [
     {
-      "name": "indutny",
-      "email": "fedor@indutny.com"
+      "email": "fedor@indutny.com",
+      "name": "indutny"
     }
   ],
   "name": "elliptic",
@@ -16817,13 +16837,12 @@ module.exports = function (obj) {
 
 },{}],99:[function(require,module,exports){
 /**
- * lunr - http://lunrjs.com - A bit like Solr, but much smaller and not as bright - 0.5.5
- * Copyright (C) 2014 Oliver Nightingale
- * MIT Licensed
- * @license
+ * lunr - http://lunrjs.com - A bit like Solr, but much smaller and not as bright - 0.7.1
+ * Copyright (C) 2016 Oliver Nightingale
+ * @license MIT
  */
 
-(function(){
+;(function(){
 
 /**
  * Convenience function for instantiating a new lunr index and configuring it
@@ -16874,10 +16893,10 @@ var lunr = function (config) {
   return idx
 }
 
-lunr.version = "0.5.5"
+lunr.version = "0.7.1"
 /*!
  * lunr.utils
- * Copyright (C) 2014 Oliver Nightingale
+ * Copyright (C) 2016 Oliver Nightingale
  */
 
 /**
@@ -16899,9 +16918,27 @@ lunr.utils.warn = (function (global) {
   }
 })(this)
 
+/**
+ * Convert an object to a string.
+ *
+ * In the case of `null` and `undefined` the function returns
+ * the empty string, in all other cases the result of calling
+ * `toString` on the passed object is returned.
+ *
+ * @param {Any} obj The object to convert to a string.
+ * @return {String} string representation of the passed object.
+ * @memberOf Utils
+ */
+lunr.utils.asString = function (obj) {
+  if (obj === void 0 || obj === null) {
+    return ""
+  } else {
+    return obj.toString()
+  }
+}
 /*!
  * lunr.EventEmitter
- * Copyright (C) 2014 Oliver Nightingale
+ * Copyright (C) 2016 Oliver Nightingale
  */
 
 /**
@@ -16919,7 +16956,7 @@ lunr.EventEmitter = function () {
  * Can bind a single function to many different events in one call.
  *
  * @param {String} [eventName] The name(s) of events to bind this function to.
- * @param {Function} handler The function to call when an event is fired.
+ * @param {Function} fn The function to call when an event is fired.
  * @memberOf EventEmitter
  */
 lunr.EventEmitter.prototype.addListener = function () {
@@ -16939,7 +16976,7 @@ lunr.EventEmitter.prototype.addListener = function () {
  * Removes a handler function from a specific event.
  *
  * @param {String} eventName The name of the event to remove this function from.
- * @param {Function} handler The function to remove from an event.
+ * @param {Function} fn The function to remove from an event.
  * @memberOf EventEmitter
  */
 lunr.EventEmitter.prototype.removeListener = function (name, fn) {
@@ -16983,42 +17020,83 @@ lunr.EventEmitter.prototype.hasHandler = function (name) {
 
 /*!
  * lunr.tokenizer
- * Copyright (C) 2014 Oliver Nightingale
+ * Copyright (C) 2016 Oliver Nightingale
  */
 
 /**
  * A function for splitting a string into tokens ready to be inserted into
- * the search index.
+ * the search index. Uses `lunr.tokenizer.seperator` to split strings, change
+ * the value of this property to change how strings are split into tokens.
  *
  * @module
  * @param {String} obj The string to convert into tokens
+ * @see lunr.tokenizer.seperator
  * @returns {Array}
  */
 lunr.tokenizer = function (obj) {
   if (!arguments.length || obj == null || obj == undefined) return []
-  if (Array.isArray(obj)) return obj.map(function (t) { return t.toLowerCase() })
+  if (Array.isArray(obj)) return obj.map(function (t) { return lunr.utils.asString(t).toLowerCase() })
 
-  var str = obj.toString().replace(/^\s+/, '')
+  return obj.toString().trim().toLowerCase().split(lunr.tokenizer.seperator)
+}
 
-  for (var i = str.length - 1; i >= 0; i--) {
-    if (/\S/.test(str.charAt(i))) {
-      str = str.substring(0, i + 1)
-      break
-    }
+/**
+ * The sperator used to split a string into tokens. Override this property to change the behaviour of
+ * `lunr.tokenizer` behaviour when tokenizing strings. By default this splits on whitespace and hyphens.
+ *
+ * @static
+ * @see lunr.tokenizer
+ */
+lunr.tokenizer.seperator = /[\s\-]+/
+
+/**
+ * Loads a previously serialised tokenizer.
+ *
+ * A tokenizer function to be loaded must already be registered with lunr.tokenizer.
+ * If the serialised tokenizer has not been registered then an error will be thrown.
+ *
+ * @param {String} label The label of the serialised tokenizer.
+ * @returns {Function}
+ * @memberOf tokenizer
+ */
+lunr.tokenizer.load = function (label) {
+  var fn = this.registeredFunctions[label]
+
+  if (!fn) {
+    throw new Error('Cannot load un-registered function: ' + label)
   }
 
-  return str
-    .split(/(?:\s+|\-)/)
-    .filter(function (token) {
-      return !!token
-    })
-    .map(function (token) {
-      return token.toLowerCase()
-    })
+  return fn
+}
+
+lunr.tokenizer.label = 'default'
+
+lunr.tokenizer.registeredFunctions = {
+  'default': lunr.tokenizer
+}
+
+/**
+ * Register a tokenizer function.
+ *
+ * Functions that are used as tokenizers should be registered if they are to be used with a serialised index.
+ *
+ * Registering a function does not add it to an index, functions must still be associated with a specific index for them to be used when indexing and searching documents.
+ *
+ * @param {Function} fn The function to register.
+ * @param {String} label The label to register this function with
+ * @memberOf tokenizer
+ */
+lunr.tokenizer.registerFunction = function (fn, label) {
+  if (label in this.registeredFunctions) {
+    lunr.utils.warn('Overwriting existing tokenizer: ' + label)
+  }
+
+  fn.label = label
+  this.registeredFunctions[label] = fn
 }
 /*!
  * lunr.Pipeline
- * Copyright (C) 2014 Oliver Nightingale
+ * Copyright (C) 2016 Oliver Nightingale
  */
 
 /**
@@ -17113,7 +17191,7 @@ lunr.Pipeline.load = function (serialised) {
     if (fn) {
       pipeline.add(fn)
     } else {
-      throw new Error ('Cannot load un-registered function: ' + fnName)
+      throw new Error('Cannot load un-registered function: ' + fnName)
     }
   })
 
@@ -17150,7 +17228,12 @@ lunr.Pipeline.prototype.add = function () {
 lunr.Pipeline.prototype.after = function (existingFn, newFn) {
   lunr.Pipeline.warnIfFunctionNotRegistered(newFn)
 
-  var pos = this._stack.indexOf(existingFn) + 1
+  var pos = this._stack.indexOf(existingFn)
+  if (pos == -1) {
+    throw new Error('Cannot find existingFn')
+  }
+
+  pos = pos + 1
   this._stack.splice(pos, 0, newFn)
 }
 
@@ -17168,6 +17251,10 @@ lunr.Pipeline.prototype.before = function (existingFn, newFn) {
   lunr.Pipeline.warnIfFunctionNotRegistered(newFn)
 
   var pos = this._stack.indexOf(existingFn)
+  if (pos == -1) {
+    throw new Error('Cannot find existingFn')
+  }
+
   this._stack.splice(pos, 0, newFn)
 }
 
@@ -17179,6 +17266,10 @@ lunr.Pipeline.prototype.before = function (existingFn, newFn) {
  */
 lunr.Pipeline.prototype.remove = function (fn) {
   var pos = this._stack.indexOf(fn)
+  if (pos == -1) {
+    return
+  }
+
   this._stack.splice(pos, 1)
 }
 
@@ -17200,10 +17291,10 @@ lunr.Pipeline.prototype.run = function (tokens) {
 
     for (var j = 0; j < stackLength; j++) {
       token = this._stack[j](token, i, tokens)
-      if (token === void 0) break
+      if (token === void 0 || token === '') break
     };
 
-    if (token !== void 0) out.push(token)
+    if (token !== void 0 && token !== '') out.push(token)
   };
 
   return out
@@ -17235,7 +17326,7 @@ lunr.Pipeline.prototype.toJSON = function () {
 }
 /*!
  * lunr.Vector
- * Copyright (C) 2014 Oliver Nightingale
+ * Copyright (C) 2016 Oliver Nightingale
  */
 
 /**
@@ -17275,9 +17366,15 @@ lunr.Vector.Node = function (idx, val, next) {
  * @memberOf Vector.
  */
 lunr.Vector.prototype.insert = function (idx, val) {
+  this._magnitude = undefined;
   var list = this.list
 
   if (!list) {
+    this.list = new lunr.Vector.Node (idx, val, list)
+    return this.length++
+  }
+
+  if (idx < list.idx) {
     this.list = new lunr.Vector.Node (idx, val, list)
     return this.length++
   }
@@ -17305,7 +17402,7 @@ lunr.Vector.prototype.insert = function (idx, val) {
  * @memberOf Vector
  */
 lunr.Vector.prototype.magnitude = function () {
-  if (this._magniture) return this._magnitude
+  if (this._magnitude) return this._magnitude
   var node = this.list,
       sumOfSquares = 0,
       val
@@ -17360,7 +17457,7 @@ lunr.Vector.prototype.similarity = function (otherVector) {
 }
 /*!
  * lunr.SortedSet
- * Copyright (C) 2014 Oliver Nightingale
+ * Copyright (C) 2016 Oliver Nightingale
  */
 
 /**
@@ -17398,10 +17495,13 @@ lunr.SortedSet.load = function (serialisedData) {
  * @memberOf SortedSet
  */
 lunr.SortedSet.prototype.add = function () {
-  Array.prototype.slice.call(arguments).forEach(function (element) {
-    if (~this.indexOf(element)) return
+  var i, element
+
+  for (i = 0; i < arguments.length; i++) {
+    element = arguments[i]
+    if (~this.indexOf(element)) continue
     this.elements.splice(this.locationFor(element), 0, element)
-  }, this)
+  }
 
   this.length = this.elements.length
 }
@@ -17453,31 +17553,30 @@ lunr.SortedSet.prototype.forEach = function (fn, ctx) {
  * sorted set, or -1 if it is not present.
  *
  * @param {Object} elem The object to locate in the sorted set.
- * @param {Number} start An optional index at which to start searching from
- * within the set.
- * @param {Number} end An optional index at which to stop search from within
- * the set.
  * @returns {Number}
  * @memberOf SortedSet
  */
-lunr.SortedSet.prototype.indexOf = function (elem, start, end) {
-  var start = start || 0,
-      end = end || this.elements.length,
+lunr.SortedSet.prototype.indexOf = function (elem) {
+  var start = 0,
+      end = this.elements.length,
       sectionLength = end - start,
       pivot = start + Math.floor(sectionLength / 2),
       pivotElem = this.elements[pivot]
 
-  if (sectionLength <= 1) {
-    if (pivotElem === elem) {
-      return pivot
-    } else {
-      return -1
-    }
+  while (sectionLength > 1) {
+    if (pivotElem === elem) return pivot
+
+    if (pivotElem < elem) start = pivot
+    if (pivotElem > elem) end = pivot
+
+    sectionLength = end - start
+    pivot = start + Math.floor(sectionLength / 2)
+    pivotElem = this.elements[pivot]
   }
 
-  if (pivotElem < elem) return this.indexOf(elem, pivot, end)
-  if (pivotElem > elem) return this.indexOf(elem, start, pivot)
   if (pivotElem === elem) return pivot
+
+  return -1
 }
 
 /**
@@ -17488,27 +17587,27 @@ lunr.SortedSet.prototype.indexOf = function (elem, start, end) {
  * in the sorted set.
  *
  * @param {Object} elem The elem to find the position for in the set
- * @param {Number} start An optional index at which to start searching from
- * within the set.
- * @param {Number} end An optional index at which to stop search from within
- * the set.
  * @returns {Number}
  * @memberOf SortedSet
  */
-lunr.SortedSet.prototype.locationFor = function (elem, start, end) {
-  var start = start || 0,
-      end = end || this.elements.length,
+lunr.SortedSet.prototype.locationFor = function (elem) {
+  var start = 0,
+      end = this.elements.length,
       sectionLength = end - start,
       pivot = start + Math.floor(sectionLength / 2),
       pivotElem = this.elements[pivot]
 
-  if (sectionLength <= 1) {
-    if (pivotElem > elem) return pivot
-    if (pivotElem < elem) return pivot + 1
+  while (sectionLength > 1) {
+    if (pivotElem < elem) start = pivot
+    if (pivotElem > elem) end = pivot
+
+    sectionLength = end - start
+    pivot = start + Math.floor(sectionLength / 2)
+    pivotElem = this.elements[pivot]
   }
 
-  if (pivotElem < elem) return this.locationFor(elem, pivot, end)
-  if (pivotElem > elem) return this.locationFor(elem, start, pivot)
+  if (pivotElem > elem) return pivot
+  if (pivotElem < elem) return pivot + 1
 }
 
 /**
@@ -17582,7 +17681,9 @@ lunr.SortedSet.prototype.union = function (otherSet) {
 
   unionSet = longSet.clone()
 
-  unionSet.add.apply(unionSet, shortSet.toArray())
+  for(var i = 0, shortSetElements = shortSet.toArray(); i < shortSetElements.length; i++){
+    unionSet.add(shortSetElements[i])
+  }
 
   return unionSet
 }
@@ -17598,7 +17699,7 @@ lunr.SortedSet.prototype.toJSON = function () {
 }
 /*!
  * lunr.Index
- * Copyright (C) 2014 Oliver Nightingale
+ * Copyright (C) 2016 Oliver Nightingale
  */
 
 /**
@@ -17616,6 +17717,7 @@ lunr.Index = function () {
   this.tokenStore = new lunr.TokenStore
   this.corpusTokens = new lunr.SortedSet
   this.eventEmitter =  new lunr.EventEmitter
+  this.tokenizerFn = lunr.tokenizer
 
   this._idfCache = {}
 
@@ -17630,7 +17732,7 @@ lunr.Index = function () {
  * The handler can be bound to many events at the same time.
  *
  * @param {String} [eventName] The name(s) of events to bind the function to.
- * @param {Function} handler The serialised set to load.
+ * @param {Function} fn The serialised set to load.
  * @memberOf Index
  */
 lunr.Index.prototype.on = function () {
@@ -17642,7 +17744,7 @@ lunr.Index.prototype.on = function () {
  * Removes a handler from an event being emitted by the index.
  *
  * @param {String} eventName The name of events to remove the function from.
- * @param {Function} handler The serialised set to load.
+ * @param {Function} fn The serialised set to load.
  * @memberOf Index
  */
 lunr.Index.prototype.off = function (name, fn) {
@@ -17669,6 +17771,7 @@ lunr.Index.load = function (serialisedData) {
   idx._fields = serialisedData.fields
   idx._ref = serialisedData.ref
 
+  idx.tokenizer = lunr.tokenizer.load(serialisedData.tokenizer)
   idx.documentStore = lunr.Store.load(serialisedData.documentStore)
   idx.tokenStore = lunr.TokenStore.load(serialisedData.tokenStore)
   idx.corpusTokens = lunr.SortedSet.load(serialisedData.corpusTokens)
@@ -17710,6 +17813,9 @@ lunr.Index.prototype.field = function (fieldName, opts) {
  * This should only be changed before adding documents to the index, changing
  * the ref property without resetting the index can lead to unexpected results.
  *
+ * The value of ref can be of any type but it _must_ be stably comparable and
+ * orderable.
+ *
  * @param {String} refName The property to use to uniquely identify the
  * documents in the index.
  * @param {Boolean} emitEvent Whether to emit add events, defaults to true
@@ -17718,6 +17824,28 @@ lunr.Index.prototype.field = function (fieldName, opts) {
  */
 lunr.Index.prototype.ref = function (refName) {
   this._ref = refName
+  return this
+}
+
+/**
+ * Sets the tokenizer used for this index.
+ *
+ * By default the index will use the default tokenizer, lunr.tokenizer. The tokenizer
+ * should only be changed before adding documents to the index. Changing the tokenizer
+ * without re-building the index can lead to unexpected results.
+ *
+ * @param {Function} fn The function to use as a tokenizer.
+ * @returns {lunr.Index}
+ * @memberOf Index
+ */
+lunr.Index.prototype.tokenizer = function (fn) {
+  var isRegistered = fn.label && (fn.label in lunr.tokenizer.registeredFunctions)
+
+  if (!isRegistered) {
+    lunr.utils.warn('Function is not a registered tokenizer. This may cause problems when serialising the index')
+  }
+
+  this.tokenizerFn = fn
   return this
 }
 
@@ -17743,26 +17871,39 @@ lunr.Index.prototype.add = function (doc, emitEvent) {
       emitEvent = emitEvent === undefined ? true : emitEvent
 
   this._fields.forEach(function (field) {
-    var fieldTokens = this.pipeline.run(lunr.tokenizer(doc[field.name]))
+    var fieldTokens = this.pipeline.run(this.tokenizerFn(doc[field.name]))
 
     docTokens[field.name] = fieldTokens
-    lunr.SortedSet.prototype.add.apply(allDocumentTokens, fieldTokens)
+
+    for (var i = 0; i < fieldTokens.length; i++) {
+      var token = fieldTokens[i]
+      allDocumentTokens.add(token)
+      this.corpusTokens.add(token)
+    }
   }, this)
 
   this.documentStore.set(docRef, allDocumentTokens)
-  lunr.SortedSet.prototype.add.apply(this.corpusTokens, allDocumentTokens.toArray())
 
   for (var i = 0; i < allDocumentTokens.length; i++) {
     var token = allDocumentTokens.elements[i]
-    var tf = this._fields.reduce(function (memo, field) {
-      var fieldLength = docTokens[field.name].length
+    var tf = 0;
 
-      if (!fieldLength) return memo
+    for (var j = 0; j < this._fields.length; j++){
+      var field = this._fields[j]
+      var fieldTokens = docTokens[field.name]
+      var fieldLength = fieldTokens.length
 
-      var tokenCount = docTokens[field.name].filter(function (t) { return t === token }).length
+      if (!fieldLength) continue
 
-      return memo + (tokenCount / fieldLength * field.boost)
-    }, 0)
+      var tokenCount = 0
+      for (var k = 0; k < fieldLength; k++){
+        if (fieldTokens[k] === token){
+          tokenCount++
+        }
+      }
+
+      tf += (tokenCount / fieldLength * field.boost)
+    }
 
     this.tokenStore.add(token, { ref: docRef, tf: tf })
   };
@@ -17850,7 +17991,7 @@ lunr.Index.prototype.idf = function (term) {
       idf = 1
 
   if (documentFrequency > 0) {
-    idf = 1 + Math.log(this.tokenStore.length / documentFrequency)
+    idf = 1 + Math.log(this.documentStore.length / documentFrequency)
   }
 
   return this._idfCache[cacheKey] = idf
@@ -17881,7 +18022,7 @@ lunr.Index.prototype.idf = function (term) {
  * @memberOf Index
  */
 lunr.Index.prototype.search = function (query) {
-  var queryTokens = this.pipeline.run(lunr.tokenizer(query)),
+  var queryTokens = this.pipeline.run(this.tokenizerFn(query)),
       queryVector = new lunr.Vector,
       documentSets = [],
       fieldBoosts = this._fields.reduce(function (memo, f) { return memo + f.boost }, 0)
@@ -17917,7 +18058,14 @@ lunr.Index.prototype.search = function (query) {
         if (pos > -1) queryVector.insert(pos, tf * idf * similarityBoost)
 
         // add all the documents that have this key into a set
-        Object.keys(self.tokenStore.get(key)).forEach(function (ref) { set.add(ref) })
+        // ensuring that the type of key is preserved
+        var matchingDocuments = self.tokenStore.get(key),
+            refs = Object.keys(matchingDocuments),
+            refsLen = refs.length
+
+        for (var i = 0; i < refsLen; i++) {
+          set.add(matchingDocuments[refs[i]].ref)
+        }
 
         return memo.union(set)
       }, new lunr.SortedSet)
@@ -17979,6 +18127,7 @@ lunr.Index.prototype.toJSON = function () {
     version: lunr.version,
     fields: this._fields,
     ref: this._ref,
+    tokenizer: this.tokenizerFn.label,
     documentStore: this.documentStore.toJSON(),
     tokenStore: this.tokenStore.toJSON(),
     corpusTokens: this.corpusTokens.toJSON(),
@@ -18019,7 +18168,7 @@ lunr.Index.prototype.use = function (plugin) {
 }
 /*!
  * lunr.Store
- * Copyright (C) 2014 Oliver Nightingale
+ * Copyright (C) 2016 Oliver Nightingale
  */
 
 /**
@@ -18061,8 +18210,8 @@ lunr.Store.load = function (serialisedData) {
  * @memberOf Store
  */
 lunr.Store.prototype.set = function (id, tokens) {
+  if (!this.has(id)) this.length++
   this.store[id] = tokens
-  this.length = Object.keys(this.store).length
 }
 
 /**
@@ -18115,13 +18264,13 @@ lunr.Store.prototype.toJSON = function () {
 
 /*!
  * lunr.stemmer
- * Copyright (C) 2014 Oliver Nightingale
+ * Copyright (C) 2016 Oliver Nightingale
  * Includes code from - http://tartarus.org/~martin/PorterStemmer/js.txt
  */
 
 /**
  * lunr.stemmer is an english language stemmer, this is a JavaScript
- * implementation of the PorterStemmer taken from http://tartaurs.org/~martin
+ * implementation of the PorterStemmer taken from http://tartarus.org/~martin
  *
  * @module
  * @param {String} str The string to stem
@@ -18173,7 +18322,33 @@ lunr.stemmer = (function(){
     mgr1 = "^(" + C + ")?" + V + C + V + C,       // [C]VCVC... is m>1
     s_v = "^(" + C + ")?" + v;                   // vowel in stem
 
-  return function (w) {
+  var re_mgr0 = new RegExp(mgr0);
+  var re_mgr1 = new RegExp(mgr1);
+  var re_meq1 = new RegExp(meq1);
+  var re_s_v = new RegExp(s_v);
+
+  var re_1a = /^(.+?)(ss|i)es$/;
+  var re2_1a = /^(.+?)([^s])s$/;
+  var re_1b = /^(.+?)eed$/;
+  var re2_1b = /^(.+?)(ed|ing)$/;
+  var re_1b_2 = /.$/;
+  var re2_1b_2 = /(at|bl|iz)$/;
+  var re3_1b_2 = new RegExp("([^aeiouylsz])\\1$");
+  var re4_1b_2 = new RegExp("^" + C + v + "[^aeiouwxy]$");
+
+  var re_1c = /^(.+?[^aeiou])y$/;
+  var re_2 = /^(.+?)(ational|tional|enci|anci|izer|bli|alli|entli|eli|ousli|ization|ation|ator|alism|iveness|fulness|ousness|aliti|iviti|biliti|logi)$/;
+
+  var re_3 = /^(.+?)(icate|ative|alize|iciti|ical|ful|ness)$/;
+
+  var re_4 = /^(.+?)(al|ance|ence|er|ic|able|ible|ant|ement|ment|ent|ou|ism|ate|iti|ous|ive|ize)$/;
+  var re2_4 = /^(.+?)(s|t)(ion)$/;
+
+  var re_5 = /^(.+?)e$/;
+  var re_5_1 = /ll$/;
+  var re3_5 = new RegExp("^" + C + v + "[^aeiouwxy]$");
+
+  var porterStemmer = function porterStemmer(w) {
     var   stem,
       suffix,
       firstch,
@@ -18190,39 +18365,39 @@ lunr.stemmer = (function(){
     }
 
     // Step 1a
-    re = /^(.+?)(ss|i)es$/;
-    re2 = /^(.+?)([^s])s$/;
+    re = re_1a
+    re2 = re2_1a;
 
     if (re.test(w)) { w = w.replace(re,"$1$2"); }
     else if (re2.test(w)) { w = w.replace(re2,"$1$2"); }
 
     // Step 1b
-    re = /^(.+?)eed$/;
-    re2 = /^(.+?)(ed|ing)$/;
+    re = re_1b;
+    re2 = re2_1b;
     if (re.test(w)) {
       var fp = re.exec(w);
-      re = new RegExp(mgr0);
+      re = re_mgr0;
       if (re.test(fp[1])) {
-        re = /.$/;
+        re = re_1b_2;
         w = w.replace(re,"");
       }
     } else if (re2.test(w)) {
       var fp = re2.exec(w);
       stem = fp[1];
-      re2 = new RegExp(s_v);
+      re2 = re_s_v;
       if (re2.test(stem)) {
         w = stem;
-        re2 = /(at|bl|iz)$/;
-        re3 = new RegExp("([^aeiouylsz])\\1$");
-        re4 = new RegExp("^" + C + v + "[^aeiouwxy]$");
+        re2 = re2_1b_2;
+        re3 = re3_1b_2;
+        re4 = re4_1b_2;
         if (re2.test(w)) {  w = w + "e"; }
-        else if (re3.test(w)) { re = /.$/; w = w.replace(re,""); }
+        else if (re3.test(w)) { re = re_1b_2; w = w.replace(re,""); }
         else if (re4.test(w)) { w = w + "e"; }
       }
     }
 
     // Step 1c - replace suffix y or Y by i if preceded by a non-vowel which is not the first letter of the word (so cry -> cri, by -> by, say -> say)
-    re = /^(.+?[^aeiou])y$/;
+    re = re_1c;
     if (re.test(w)) {
       var fp = re.exec(w);
       stem = fp[1];
@@ -18230,65 +18405,65 @@ lunr.stemmer = (function(){
     }
 
     // Step 2
-    re = /^(.+?)(ational|tional|enci|anci|izer|bli|alli|entli|eli|ousli|ization|ation|ator|alism|iveness|fulness|ousness|aliti|iviti|biliti|logi)$/;
+    re = re_2;
     if (re.test(w)) {
       var fp = re.exec(w);
       stem = fp[1];
       suffix = fp[2];
-      re = new RegExp(mgr0);
+      re = re_mgr0;
       if (re.test(stem)) {
         w = stem + step2list[suffix];
       }
     }
 
     // Step 3
-    re = /^(.+?)(icate|ative|alize|iciti|ical|ful|ness)$/;
+    re = re_3;
     if (re.test(w)) {
       var fp = re.exec(w);
       stem = fp[1];
       suffix = fp[2];
-      re = new RegExp(mgr0);
+      re = re_mgr0;
       if (re.test(stem)) {
         w = stem + step3list[suffix];
       }
     }
 
     // Step 4
-    re = /^(.+?)(al|ance|ence|er|ic|able|ible|ant|ement|ment|ent|ou|ism|ate|iti|ous|ive|ize)$/;
-    re2 = /^(.+?)(s|t)(ion)$/;
+    re = re_4;
+    re2 = re2_4;
     if (re.test(w)) {
       var fp = re.exec(w);
       stem = fp[1];
-      re = new RegExp(mgr1);
+      re = re_mgr1;
       if (re.test(stem)) {
         w = stem;
       }
     } else if (re2.test(w)) {
       var fp = re2.exec(w);
       stem = fp[1] + fp[2];
-      re2 = new RegExp(mgr1);
+      re2 = re_mgr1;
       if (re2.test(stem)) {
         w = stem;
       }
     }
 
     // Step 5
-    re = /^(.+?)e$/;
+    re = re_5;
     if (re.test(w)) {
       var fp = re.exec(w);
       stem = fp[1];
-      re = new RegExp(mgr1);
-      re2 = new RegExp(meq1);
-      re3 = new RegExp("^" + C + v + "[^aeiouwxy]$");
+      re = re_mgr1;
+      re2 = re_meq1;
+      re3 = re3_5;
       if (re.test(stem) || (re2.test(stem) && !(re3.test(stem)))) {
         w = stem;
       }
     }
 
-    re = /ll$/;
-    re2 = new RegExp(mgr1);
+    re = re_5_1;
+    re2 = re_mgr1;
     if (re.test(w) && re2.test(w)) {
-      re = /.$/;
+      re = re_1b_2;
       w = w.replace(re,"");
     }
 
@@ -18299,14 +18474,40 @@ lunr.stemmer = (function(){
     }
 
     return w;
-  }
+  };
+
+  return porterStemmer;
 })();
 
 lunr.Pipeline.registerFunction(lunr.stemmer, 'stemmer')
 /*!
  * lunr.stopWordFilter
- * Copyright (C) 2014 Oliver Nightingale
+ * Copyright (C) 2016 Oliver Nightingale
  */
+
+/**
+ * lunr.generateStopWordFilter builds a stopWordFilter function from the provided
+ * list of stop words.
+ *
+ * The built in lunr.stopWordFilter is built using this generator and can be used
+ * to generate custom stopWordFilters for applications or non English languages.
+ *
+ * @module
+ * @param {Array} token The token to pass through the filter
+ * @returns {Function}
+ * @see lunr.Pipeline
+ * @see lunr.stopWordFilter
+ */
+lunr.generateStopWordFilter = function (stopWords) {
+  var words = stopWords.reduce(function (memo, stopWord) {
+    memo[stopWord] = stopWord
+    return memo
+  }, {})
+
+  return function (token) {
+    if (token && words[token] !== token) return token
+  }
+}
 
 /**
  * lunr.stopWordFilter is an English language stop word list filter, any words
@@ -18320,139 +18521,132 @@ lunr.Pipeline.registerFunction(lunr.stemmer, 'stemmer')
  * @returns {String}
  * @see lunr.Pipeline
  */
-lunr.stopWordFilter = function (token) {
-  if (lunr.stopWordFilter.stopWords.indexOf(token) === -1) return token
-}
-
-lunr.stopWordFilter.stopWords = new lunr.SortedSet
-lunr.stopWordFilter.stopWords.length = 119
-lunr.stopWordFilter.stopWords.elements = [
-  "",
-  "a",
-  "able",
-  "about",
-  "across",
-  "after",
-  "all",
-  "almost",
-  "also",
-  "am",
-  "among",
-  "an",
-  "and",
-  "any",
-  "are",
-  "as",
-  "at",
-  "be",
-  "because",
-  "been",
-  "but",
-  "by",
-  "can",
-  "cannot",
-  "could",
-  "dear",
-  "did",
-  "do",
-  "does",
-  "either",
-  "else",
-  "ever",
-  "every",
-  "for",
-  "from",
-  "get",
-  "got",
-  "had",
-  "has",
-  "have",
-  "he",
-  "her",
-  "hers",
-  "him",
-  "his",
-  "how",
-  "however",
-  "i",
-  "if",
-  "in",
-  "into",
-  "is",
-  "it",
-  "its",
-  "just",
-  "least",
-  "let",
-  "like",
-  "likely",
-  "may",
-  "me",
-  "might",
-  "most",
-  "must",
-  "my",
-  "neither",
-  "no",
-  "nor",
-  "not",
-  "of",
-  "off",
-  "often",
-  "on",
-  "only",
-  "or",
-  "other",
-  "our",
-  "own",
-  "rather",
-  "said",
-  "say",
-  "says",
-  "she",
-  "should",
-  "since",
-  "so",
-  "some",
-  "than",
-  "that",
-  "the",
-  "their",
-  "them",
-  "then",
-  "there",
-  "these",
-  "they",
-  "this",
-  "tis",
-  "to",
-  "too",
-  "twas",
-  "us",
-  "wants",
-  "was",
-  "we",
-  "were",
-  "what",
-  "when",
-  "where",
-  "which",
-  "while",
-  "who",
-  "whom",
-  "why",
-  "will",
-  "with",
-  "would",
-  "yet",
-  "you",
-  "your"
-]
+lunr.stopWordFilter = lunr.generateStopWordFilter([
+  'a',
+  'able',
+  'about',
+  'across',
+  'after',
+  'all',
+  'almost',
+  'also',
+  'am',
+  'among',
+  'an',
+  'and',
+  'any',
+  'are',
+  'as',
+  'at',
+  'be',
+  'because',
+  'been',
+  'but',
+  'by',
+  'can',
+  'cannot',
+  'could',
+  'dear',
+  'did',
+  'do',
+  'does',
+  'either',
+  'else',
+  'ever',
+  'every',
+  'for',
+  'from',
+  'get',
+  'got',
+  'had',
+  'has',
+  'have',
+  'he',
+  'her',
+  'hers',
+  'him',
+  'his',
+  'how',
+  'however',
+  'i',
+  'if',
+  'in',
+  'into',
+  'is',
+  'it',
+  'its',
+  'just',
+  'least',
+  'let',
+  'like',
+  'likely',
+  'may',
+  'me',
+  'might',
+  'most',
+  'must',
+  'my',
+  'neither',
+  'no',
+  'nor',
+  'not',
+  'of',
+  'off',
+  'often',
+  'on',
+  'only',
+  'or',
+  'other',
+  'our',
+  'own',
+  'rather',
+  'said',
+  'say',
+  'says',
+  'she',
+  'should',
+  'since',
+  'so',
+  'some',
+  'than',
+  'that',
+  'the',
+  'their',
+  'them',
+  'then',
+  'there',
+  'these',
+  'they',
+  'this',
+  'tis',
+  'to',
+  'too',
+  'twas',
+  'us',
+  'wants',
+  'was',
+  'we',
+  'were',
+  'what',
+  'when',
+  'where',
+  'which',
+  'while',
+  'who',
+  'whom',
+  'why',
+  'will',
+  'with',
+  'would',
+  'yet',
+  'you',
+  'your'
+])
 
 lunr.Pipeline.registerFunction(lunr.stopWordFilter, 'stopWordFilter')
 /*!
  * lunr.trimmer
- * Copyright (C) 2014 Oliver Nightingale
+ * Copyright (C) 2016 Oliver Nightingale
  */
 
 /**
@@ -18470,15 +18664,13 @@ lunr.Pipeline.registerFunction(lunr.stopWordFilter, 'stopWordFilter')
  * @see lunr.Pipeline
  */
 lunr.trimmer = function (token) {
-  return token
-    .replace(/^\W+/, '')
-    .replace(/\W+$/, '')
+  return token.replace(/^\W+/, '').replace(/\W+$/, '')
 }
 
 lunr.Pipeline.registerFunction(lunr.trimmer, 'trimmer')
 /*!
  * lunr.stemmer
- * Copyright (C) 2014 Oliver Nightingale
+ * Copyright (C) 2016 Oliver Nightingale
  * Includes code from - http://tartarus.org/~martin/PorterStemmer/js.txt
  */
 
@@ -18524,7 +18716,7 @@ lunr.TokenStore.load = function (serialisedData) {
  */
 lunr.TokenStore.prototype.add = function (token, doc, root) {
   var root = root || this.root,
-      key = token[0],
+      key = token.charAt(0),
       rest = token.slice(1)
 
   if (!(key in root)) root[key] = {docs: {}}
@@ -18554,9 +18746,9 @@ lunr.TokenStore.prototype.has = function (token) {
   var node = this.root
 
   for (var i = 0; i < token.length; i++) {
-    if (!node[token[i]]) return false
+    if (!node[token.charAt(i)]) return false
 
-    node = node[token[i]]
+    node = node[token.charAt(i)]
   }
 
   return true
@@ -18580,9 +18772,9 @@ lunr.TokenStore.prototype.getNode = function (token) {
   var node = this.root
 
   for (var i = 0; i < token.length; i++) {
-    if (!node[token[i]]) return {}
+    if (!node[token.charAt(i)]) return {}
 
-    node = node[token[i]]
+    node = node[token.charAt(i)]
   }
 
   return node
@@ -18624,8 +18816,8 @@ lunr.TokenStore.prototype.remove = function (token, ref) {
   var node = this.root
 
   for (var i = 0; i < token.length; i++) {
-    if (!(token[i] in node)) return
-    node = node[token[i]]
+    if (!(token.charAt(i) in node)) return
+    node = node[token.charAt(i)]
   }
 
   delete node.docs[ref]
@@ -18669,9 +18861,8 @@ lunr.TokenStore.prototype.toJSON = function () {
   }
 }
 
-
   /**
-   * export the module via AMD, CommonnJS or as a browser global
+   * export the module via AMD, CommonJS or as a browser global
    * Export code from https://github.com/umdjs/umd/blob/master/returnExports.js
    */
   ;(function (root, factory) {
@@ -18697,7 +18888,7 @@ lunr.TokenStore.prototype.toJSON = function () {
      */
     return lunr
   }))
-})()
+})();
 
 },{}],100:[function(require,module,exports){
 !function(a,b){"function"==typeof define&&define.amd?define(b):"object"==typeof exports?module.exports=b():a.md5=b()}(this,function(){function a(a,b){var g=a[0],h=a[1],i=a[2],j=a[3];g=c(g,h,i,j,b[0],7,-680876936),j=c(j,g,h,i,b[1],12,-389564586),i=c(i,j,g,h,b[2],17,606105819),h=c(h,i,j,g,b[3],22,-1044525330),g=c(g,h,i,j,b[4],7,-176418897),j=c(j,g,h,i,b[5],12,1200080426),i=c(i,j,g,h,b[6],17,-1473231341),h=c(h,i,j,g,b[7],22,-45705983),g=c(g,h,i,j,b[8],7,1770035416),j=c(j,g,h,i,b[9],12,-1958414417),i=c(i,j,g,h,b[10],17,-42063),h=c(h,i,j,g,b[11],22,-1990404162),g=c(g,h,i,j,b[12],7,1804603682),j=c(j,g,h,i,b[13],12,-40341101),i=c(i,j,g,h,b[14],17,-1502002290),h=c(h,i,j,g,b[15],22,1236535329),g=d(g,h,i,j,b[1],5,-165796510),j=d(j,g,h,i,b[6],9,-1069501632),i=d(i,j,g,h,b[11],14,643717713),h=d(h,i,j,g,b[0],20,-373897302),g=d(g,h,i,j,b[5],5,-701558691),j=d(j,g,h,i,b[10],9,38016083),i=d(i,j,g,h,b[15],14,-660478335),h=d(h,i,j,g,b[4],20,-405537848),g=d(g,h,i,j,b[9],5,568446438),j=d(j,g,h,i,b[14],9,-1019803690),i=d(i,j,g,h,b[3],14,-187363961),h=d(h,i,j,g,b[8],20,1163531501),g=d(g,h,i,j,b[13],5,-1444681467),j=d(j,g,h,i,b[2],9,-51403784),i=d(i,j,g,h,b[7],14,1735328473),h=d(h,i,j,g,b[12],20,-1926607734),g=e(g,h,i,j,b[5],4,-378558),j=e(j,g,h,i,b[8],11,-2022574463),i=e(i,j,g,h,b[11],16,1839030562),h=e(h,i,j,g,b[14],23,-35309556),g=e(g,h,i,j,b[1],4,-1530992060),j=e(j,g,h,i,b[4],11,1272893353),i=e(i,j,g,h,b[7],16,-155497632),h=e(h,i,j,g,b[10],23,-1094730640),g=e(g,h,i,j,b[13],4,681279174),j=e(j,g,h,i,b[0],11,-358537222),i=e(i,j,g,h,b[3],16,-722521979),h=e(h,i,j,g,b[6],23,76029189),g=e(g,h,i,j,b[9],4,-640364487),j=e(j,g,h,i,b[12],11,-421815835),i=e(i,j,g,h,b[15],16,530742520),h=e(h,i,j,g,b[2],23,-995338651),g=f(g,h,i,j,b[0],6,-198630844),j=f(j,g,h,i,b[7],10,1126891415),i=f(i,j,g,h,b[14],15,-1416354905),h=f(h,i,j,g,b[5],21,-57434055),g=f(g,h,i,j,b[12],6,1700485571),j=f(j,g,h,i,b[3],10,-1894986606),i=f(i,j,g,h,b[10],15,-1051523),h=f(h,i,j,g,b[1],21,-2054922799),g=f(g,h,i,j,b[8],6,1873313359),j=f(j,g,h,i,b[15],10,-30611744),i=f(i,j,g,h,b[6],15,-1560198380),h=f(h,i,j,g,b[13],21,1309151649),g=f(g,h,i,j,b[4],6,-145523070),j=f(j,g,h,i,b[11],10,-1120210379),i=f(i,j,g,h,b[2],15,718787259),h=f(h,i,j,g,b[9],21,-343485551),a[0]=l(g,a[0]),a[1]=l(h,a[1]),a[2]=l(i,a[2]),a[3]=l(j,a[3])}function b(a,b,c,d,e,f){return b=l(l(b,a),l(d,f)),l(b<<e|b>>>32-e,c)}function c(a,c,d,e,f,g,h){return b(c&d|~c&e,a,c,f,g,h)}function d(a,c,d,e,f,g,h){return b(c&e|d&~e,a,c,f,g,h)}function e(a,c,d,e,f,g,h){return b(c^d^e,a,c,f,g,h)}function f(a,c,d,e,f,g,h){return b(d^(c|~e),a,c,f,g,h)}function g(b){txt="";var c,d=b.length,e=[1732584193,-271733879,-1732584194,271733878];for(c=64;c<=b.length;c+=64)a(e,h(b.substring(c-64,c)));b=b.substring(c-64);var f=[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];for(c=0;c<b.length;c++)f[c>>2]|=b.charCodeAt(c)<<(c%4<<3);if(f[c>>2]|=128<<(c%4<<3),c>55)for(a(e,f),c=0;16>c;c++)f[c]=0;return f[14]=8*d,a(e,f),e}function h(a){var b,c=[];for(b=0;64>b;b+=4)c[b>>2]=a.charCodeAt(b)+(a.charCodeAt(b+1)<<8)+(a.charCodeAt(b+2)<<16)+(a.charCodeAt(b+3)<<24);return c}function i(a){for(var b="",c=0;4>c;c++)b+=m[a>>8*c+4&15]+m[a>>8*c&15];return b}function j(a){for(var b=0;b<a.length;b++)a[b]=i(a[b]);return a.join("")}function k(a){return j(g(a))}function l(a,b){return a+b&4294967295}function l(a,b){var c=(65535&a)+(65535&b),d=(a>>16)+(b>>16)+(c>>16);return d<<16|65535&c}var m="0123456789abcdef".split("");return"5d41402abc4b2a76b9719d911017c592"!=k("hello"),k});
@@ -27483,7 +27674,9 @@ exports.search = utils.toPromise(function (opts, callback) {
   var index = indexes[language];
   if (!index) {
     index = indexes[language] = lunr();
-    if (language !== 'en') {
+    if (Array.isArray(language)) {
+      index.use(global.lunr['multiLanguage'].apply(this, language));
+    } else if (language !== 'en') {
       index.use(global.lunr[language]);
     }
   }
@@ -27492,9 +27685,11 @@ exports.search = utils.toPromise(function (opts, callback) {
   // by the fields the user want to index (boost doesn't matter)
   // plus the tokenizer
 
-  var indexParams =  {
+  var indexParams = {
     language: language,
-    fields: fieldBoosts.map(function (x) { return x.field; }).sort()
+    fields: fieldBoosts.map(function (x) {
+      return x.field;
+    }).sort()
   };
 
   if (filter) {
@@ -27636,7 +27831,7 @@ exports.search = utils.toPromise(function (opts, callback) {
       // filter before fetching docs or applying highlighting
       // for a slight optimization, since for now we've only fetched ids/scores
       return (typeof limit === 'number' && limit >= 0) ?
-          rows.slice(skip, skip + limit) : skip > 0 ? rows.slice(skip) : rows;
+        rows.slice(skip, skip + limit) : skip > 0 ? rows.slice(skip) : rows;
     }).then(function (rows) {
       if (includeDocs) {
         return applyIncludeDocs(pouch, rows);
@@ -27674,7 +27869,7 @@ exports.search = utils.toPromise(function (opts, callback) {
 //
 
 function calculateDocumentScores(queryTerms, termDFs, docIdsToFieldsToQueryTerms,
-                            docIdsToFieldsToNorms, fieldBoosts) {
+                                 docIdsToFieldsToNorms, fieldBoosts) {
 
   var results = Object.keys(docIdsToFieldsToQueryTerms).map(function (docId) {
 
