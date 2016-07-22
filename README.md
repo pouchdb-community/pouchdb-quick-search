@@ -539,7 +539,7 @@ If you don't specify a `language`, then the default is `'en'`. Under the hood, s
 
 ### Multi-language search
 
-Recently `lunr-languages` developers had added the ability to search in multiple languages at once. To be able to search from several languages:
+Recently `lunr-languages` developers have added the ability to search in multiple languages at once. To be able to search from several languages:
 
 1) You should include `lunr.multi.js` from the `lunr-languages` repository. (Currently it is available only on master; they haven't tagged a release). 
 
