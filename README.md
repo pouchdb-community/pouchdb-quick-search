@@ -536,6 +536,23 @@ If you don't specify a `language`, then the default is `'en'`. Under the hood, s
 
 **Note:** currently the lunr-languages plugin expects a global `lunr` object, so unfortunately you will have to include lunr as an extra dependency in your project and assign it to global (as described in the lunr-languages instructions).  Hopefully this will be fixed in the future.
 
+#### Multi-language search
+
+Recently lunr-languages developers had deployed possibility to search from multiple languages at once. To be able to search from several languages 
+
+1) You should include `lunr.multi.js` from lunr-languages repository. (Current it is available only on master, they haven't tagged a release) 
+
+2) Pass languages in array
+
+```js
+pouch.search({
+  query: 'marche', 
+  fields: ['text'], 
+  include_docs: true,
+  language: ['en', 'fr']
+});
+```
+
 ### Autosuggestions and prefix search
 
 While the `pouchdb-quick-search` plugin does not provide prefix/autosuggestion support, you can trivially do it in PouchDB itself by using `allDocs()`.
