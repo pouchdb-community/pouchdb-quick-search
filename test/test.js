@@ -28,7 +28,7 @@ var dbs;
 if (process.browser) {
   dbs = 'testdb' + Math.random();
 } else {
-  dbs = process.env.TEST_DB;
+  dbs = process.env.TEST_DB || 'testdb';
 }
 
 dbs.split(',').forEach(function (db) {

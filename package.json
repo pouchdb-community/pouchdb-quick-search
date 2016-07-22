@@ -21,10 +21,10 @@
     "url": "https://github.com/nolanlawson/pouchdb-quick-search/issues"
   },
   "scripts": {
-    "test-node": "TEST_DB=testdb istanbul test ./node_modules/mocha/bin/_mocha test/test.js",
+    "test-node": "istanbul test ./node_modules/mocha/bin/_mocha test/test.js",
     "test-browser": "./bin/test-browser.js",
-    "jshint": "jshint -c .jshintrc lib/*.js test/test.js",
-    "test": "npm run jshint && ./bin/run-test.sh",
+    "jshint": "jshint -c .jshintrc lib test/test.js",
+    "test": "npm run jshint && bash ./bin/run-test.sh",
     "build": "mkdirp dist && browserify . -p bundle-collapser/plugin -t es3ify -s PouchQuickSearch > dist/pouchdb.quick-search.js && npm run min",
     "min": "uglifyjs dist/pouchdb.quick-search.js -mc > dist/pouchdb.quick-search.min.js",
     "dev": "browserify test/test.js > test/test-bundle.js && npm run dev-server",
