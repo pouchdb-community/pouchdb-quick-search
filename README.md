@@ -80,6 +80,7 @@ API
 * [Deleting the index](#deleting-the-index)
 * [Stale queries](#stale-queries)
 * [Other languages](#other-languages)
+* [Multi-language search](#multi-language-search)
 * [Autosuggestions and prefix search](#autosuggestions-and-prefix-search)
 
 
@@ -536,13 +537,13 @@ If you don't specify a `language`, then the default is `'en'`. Under the hood, s
 
 **Note:** currently the lunr-languages plugin expects a global `lunr` object, so unfortunately you will have to include lunr as an extra dependency in your project and assign it to global (as described in the lunr-languages instructions).  Hopefully this will be fixed in the future.
 
-#### Multi-language search
+### Multi-language search
 
-Recently lunr-languages developers had deployed possibility to search from multiple languages at once. To be able to search from several languages 
+Recently `lunr-languages` developers had added the ability to search in multiple languages at once. To be able to search from several languages:
 
-1) You should include `lunr.multi.js` from lunr-languages repository. (Current it is available only on master, they haven't tagged a release) 
+1) You should include `lunr.multi.js` from the `lunr-languages` repository. (Currently it is available only on master; they haven't tagged a release). 
 
-2) Pass languages in array
+2) Pass an array into `language`, for example:
 
 ```js
 pouch.search({
@@ -552,6 +553,8 @@ pouch.search({
   language: ['en', 'fr']
 });
 ```
+
+The above code will search using both French and English.
 
 ### Autosuggestions and prefix search
 
