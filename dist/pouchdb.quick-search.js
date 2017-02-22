@@ -28366,7 +28366,11 @@ function getText(fieldBoost, doc) {
   } else { // "Enhance."
     text = doc;
     for (var i = 0, len = fieldBoost.deepField.length; i < len; i++) {
-      text = text && text[fieldBoost.deepField[i]];
+      if (Array.isArray(text)) {
+        text = text.map(handleNestedObjectArrayItem(fieldBoost, fieldBoost.deepField.slice(i)));
+      } else {
+        text = text && text[fieldBoost.deepField[i]];
+      }
     }
   }
   if (text) {
@@ -28377,6 +28381,14 @@ function getText(fieldBoost, doc) {
     }
   }
   return text;
+}
+
+function handleNestedObjectArrayItem(fieldBoost, deepField) {
+  return function (one) {
+    return getText(utils.extend({}, fieldBoost, {
+      deepField: deepField
+    }), one);
+  };
 }
 
 // map function that gets passed to map/reduce
