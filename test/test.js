@@ -44,6 +44,7 @@ var docs5 = require('./docs/test-docs-5');
 var docs6 = require('./docs/test-docs-6');
 var docs7 = require('./docs/test-docs-7');
 var docs8 = require('./docs/test-docs-8');
+var docs9 = require('./docs/test-docs-9');
 
 function tests(dbName, dbType) {
 
@@ -562,6 +563,18 @@ function tests(dbName, dbType) {
       }).then(function (res) {
         var ids = res.rows.map(function (x) { return x.id; });
         ids.should.deep.equal(['2']);
+      });
+    });
+    it('allows searching from an array of nested objects', function () {
+      return db.bulkDocs({docs: docs9}).then(function () {
+        var opts = {
+          fields: ['nested.array.aField'],
+          query: 'something'
+        };
+        return db.search(opts);
+      }).then(function (res) {
+        var ids = res.rows.map(function (x) { return x.id; }).sort().reverse();
+        ids.should.deep.equal(['2', '10']);
       });
     });
     it('allows searching string arrays', function () {

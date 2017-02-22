@@ -131,7 +131,7 @@ pouch.search({
 
 ### Document structure
 
-Your document fields can be strings or arrays of strings.  Use dots to separate deeply nested fields.
+Your document fields can be strings or arrays of strings.  Use dots to separate deeply nested fields.  Searching deeply inside arrays is supported.
 
 ```js
 var doc = {
