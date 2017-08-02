@@ -1,7 +1,7 @@
 PouchDB Quick Search
 =====
 
-[![Build Status](https://travis-ci.org/nolanlawson/pouchdb-quick-search.svg)](https://travis-ci.org/nolanlawson/pouchdb-quick-search)
+[![Build Status](https://travis-ci.org/pouchdb-community/pouchdb-quick-search.svg?branch=master)](https://travis-ci.org/pouchdb-community/pouchdb-quick-search)
 
 ```js
 var pouch = new PouchDB('mydb');
