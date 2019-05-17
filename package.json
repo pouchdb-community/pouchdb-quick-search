@@ -21,7 +21,7 @@
     "url": "https://github.com/nolanlawson/pouchdb-quick-search/issues"
   },
   "scripts": {
-    "test-node": "istanbul test ./node_modules/mocha/bin/_mocha test/test.js",
+    "test-node": "nyc ./node_modules/mocha/bin/_mocha test/test.js",
     "test-browser": "./bin/test-browser.js",
     "jshint": "jshint -c .jshintrc lib test/test.js",
     "test": "npm run jshint && bash ./bin/run-test.sh",
@@ -29,7 +29,7 @@
     "min": "uglifyjs dist/pouchdb.quick-search.js -mc > dist/pouchdb.quick-search.min.js",
     "dev": "browserify test/test.js > test/test-bundle.js && npm run dev-server",
     "dev-server": "./bin/dev-server.js",
-    "coverage": "npm test --coverage && istanbul check-coverage --lines 100 --function 100 --statements 100 --branches 100"
+    "coverage": "nyc npm run test"
   },
   "dependencies": {
     "argsarray": "0.0.1",
@@ -39,6 +39,7 @@
     "lie": "^2.6.0",
     "lunr": "0.7.1",
     "md5-jkmyers": "0.0.1",
+    "nyc": "^14.1.1",
     "pouchdb-extend": "^0.1.0",
     "pouchdb-mapreduce-no-ddocs": "^2.3.2",
     "pouchdb-promise": "5.4.4",
@@ -50,19 +51,18 @@
     "bundle-collapser": "^1.2.1",
     "chai": "^3.5.0",
     "chai-as-promised": "^5.3.0",
-    "http-server": "~0.5.5",
-    "istanbul": "^0.2.7",
-    "jshint": "~2.8.0",
+    "http-server": "^0.11.1",
+    "jshint": "^2.10.2",
     "mkdirp": "^0.5.1",
-    "mocha": "^2.4.5",
+    "mocha": "^6.1.4",
     "phantomjs-prebuilt": "^2.1.7",
-    "pouchdb-memory": "^1.1.0",
+    "pouchdb-memory": "^6.0.0",
     "request": "^2.36.0",
-    "sauce-connect-launcher": "^0.14.0",
-    "selenium-standalone": "^5.1.0",
+    "sauce-connect-launcher": "^1.2.7",
+    "selenium-standalone": "^6.16.0",
     "uglify-js": "^2.4.13",
     "watchify": "^3.1.0",
-    "wd": "^0.2.21"
+    "wd": "^1.11.2"
   },
   "lib": [
     "lib",
