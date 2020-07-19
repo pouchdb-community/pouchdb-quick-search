@@ -38,7 +38,7 @@
     "json-stable-stringify": "^1.0.1",
     "lie": "^2.6.0",
     "lunr": "0.7.1",
-    "md5-jkmyers": "0.0.1",
+    "md5": "^2.2.1",
     "pouchdb-extend": "^0.1.0",
     "pouchdb-mapreduce-no-ddocs": "^2.3.2",
     "pouchdb-promise": "5.4.4",
