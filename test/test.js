@@ -75,6 +75,20 @@ function tests(dbName, dbType) {
       });
     });
 
+    it('basic search with html tags', function () {
+      return db.bulkDocs({docs: docs}).then(function () {
+        var opts = {
+          fields: ['title', 'text', 'desc'],
+          query: 'concurrent'
+        };
+        return db.search(opts);
+      }).then(function (res) {
+        res.rows.length.should.equal(1);
+        res.rows[0].id.should.equal('3');
+        res.rows[0].score.should.be.above(0);
+      });
+    });
+
     it('basic search - zero results', function () {
       return db.bulkDocs({docs: docs}).then(function () {
         var opts = {
@@ -786,6 +800,5 @@ function tests(dbName, dbType) {
           res.total_rows.should.equal(2);
         });
     });
-
   });
 }
